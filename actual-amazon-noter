@@ -33,7 +33,7 @@ from typing import Any, Optional
 import requests
 
 
-VERSION = "1.0.1"
+VERSION = "2.0.0"
 
 # Constant tags used to identify records already processed by actual-amazon-noter
 AMAZON_ORDER_ID_TAG = "#Amazon-Order-ID"
@@ -61,6 +61,7 @@ class AmazonOrder:
         self.product_names = []  # List of product names for multi-item orders
         self.item_amounts = []   # List of individual item amounts
         self.shipping_address = ""
+        self.currency = ""
     
     def add_item(self, record: 'AmazonRecord'):
         """Add an item to this order"""
@@ -68,6 +69,7 @@ class AmazonOrder:
             self.order_id = record.order_id
             self.date = record.date
             self.shipping_address = record.shipping_address
+            self.currency = getattr(record, "currency", "GBP")
         
         self.amount += record.amount
         if record.product_name:
@@ -92,7 +94,7 @@ class AmazonOrder:
                 tags.append(f"#Amazon-Product-Name-Split-{i+1}")
                 tags.append(product_name)
                 tags.append(f"#Amazon-Cost-Split-{i+1}")
-                tags.append(f"${item_amount:.2f}")
+                tags.append(f"{self.currency} {item_amount:.2f}")
         elif len(self.product_names) == 1:
             # Single item in order - use standard tags
             tags.append(AMAZON_PRODUCT_NAME_TAG)
@@ -111,6 +113,7 @@ class AmazonRecord:
     def __init__(self, record_type: str, data: dict):
         self.record_type = record_type
         self.data = data
+        self.currency = data.get("Currency", "GBP")
         
         # Extract relevant fields based on record type
         if record_type == "Order_History":
@@ -118,7 +121,7 @@ class AmazonRecord:
             self.amount = self._parse_amount(data.get("Total Amount", ""))
             self.date = self._parse_date(data.get("Order Date", ""))
             self.product_name = data.get("Product Name", "")
-            self.shipping_address = data.get("Shipment Address", "")
+            self.shipping_address = data.get("Shipping Address", "")
         elif record_type == "Digital_Content_Orders":
             self.order_id = data.get("Order ID", "")
             self.amount = self._parse_amount(data.get("Transaction Amount", ""))
@@ -275,6 +278,45 @@ class ActualBudgetAPI:
             if search_lower in (t.get("payee_name") or "").lower() or
                search_lower in (t.get("imported_payee") or "").lower()
         ]
+
+    def split_transaction(self, transaction_id: str, account_id: str, date: str,
+                          payee_id: str, splits: list) -> dict:
+        """
+        Convert a transaction into a split parent with sub-transactions.
+
+        Args:
+            transaction_id: Parent transaction ID
+            account_id: Account ID the transaction belongs to
+            date: Transaction date (YYYY-MM-DD)
+            payee_id: Payee UUID to inherit on each sub-transaction
+            splits: List of dicts with 'amount' (in minor currency units)
+                    and optionally 'notes' (product name)
+
+        Returns:
+            API response dictionary
+        """
+        subtransactions = []
+        for s in splits:
+            sub = {
+                "amount": s["amount"],
+                "account": account_id,
+                "date": date,
+                "parent_id": transaction_id,
+                "is_child": True,
+                "is_parent": False,
+                "notes": s.get("notes", ""),
+            }
+            if payee_id:
+                sub["payee"] = payee_id
+            subtransactions.append(sub)
+
+        endpoint = f"{self.url}/v1/budgets/{self.sync_id}/transactions/{transaction_id}"
+        response = self.session.patch(
+            endpoint,
+            json={"transaction": {"is_parent": True, "subtransactions": subtransactions}}
+        )
+        response.raise_for_status()
+        return response.json()
 
     def update_transaction(self, transaction_id: str, notes: str) -> dict:
         """
@@ -463,7 +505,7 @@ def match_transactions(
         List of (transaction, amazon_record) tuples representing matches
     """
     matches = []
-    
+    used_amazon = set()
     for transaction in transactions:
         # Check if it's a withdrawal or income transaction
         amount = transaction.get("amount", 0)
@@ -493,7 +535,9 @@ def match_transactions(
             continue
         
         # Find matching Amazon records
-        for amazon in amazon_records:
+        for i, amazon in enumerate(amazon_records):
+            if i in used_amazon:
+                continue
             if not amazon.date:
                 continue
             
@@ -519,12 +563,13 @@ def match_transactions(
             
             # Check date match (Amazon date should be before transaction date)
             date_diff = trans_date - amazon.date
-            if date_diff.days < 0:
+            if date_diff.days < -2:
                 continue
             if date_diff.days > days_tolerance:
                 continue
             
             matches.append((transaction, amazon))
+            used_amazon.add(i)
             break  # Only match the first valid Amazon record
     
     return matches
@@ -668,8 +713,9 @@ def print_dry_run_csv(transaction: dict, amazon_record: AmazonRecord, original_n
     # Handle both AmazonRecord and AmazonOrder (aggregated)
     if hasattr(amazon_record, 'product_names'):
         # AmazonOrder - show all products and costs
+        ccy = getattr(amazon_record, 'currency', 'GBP')
         for i, (product, cost) in enumerate(zip(amazon_record.product_names, amazon_record.item_amounts)):
-            print(f"  Amazon Product {i+1}: {product} (${cost:.2f})")
+            print(f"  Amazon Product {i+1}: {product} ({ccy} {cost:.2f})")
     else:
         print(f"  Amazon Product: {amazon_record.product_name}")
     print()
@@ -906,7 +952,7 @@ Examples:
     
     # Get transactions with "Amazon" in payee
     print("Fetching transactions from Actual Budget...")
-    transactions = api.get_transactions_by_payee_contains("Amazon")
+    transactions = api.get_transactions_by_payee_contains("Amazon") + api.get_transactions_by_payee_contains("Amz")
     print(f"Found {len(transactions)} transactions with 'Amazon' in payee")
     
     # Categorize Amazon records (withdrawals vs income/refunds)
@@ -929,6 +975,7 @@ Examples:
     updated_count = 0
     skipped_count = 0
     error_count = 0
+    split_count = 0
     
     for transaction, amazon_record in all_matches:
         original_notes = transaction.get("notes", "")
@@ -948,6 +995,23 @@ Examples:
                 print_dry_run_csv(transaction, amazon_record, original_notes, new_notes)
             else:
                 print_dry_run_json(transaction, amazon_record, original_notes, new_notes)
+            # Show split preview for multi-item orders
+            if hasattr(amazon_record, 'product_names') and len(amazon_record.product_names) > 1:
+                if transaction.get("is_parent"):
+                    print(f"  [SKIP SPLIT] Already a split transaction")
+                else:
+                    sign = -1 if transaction.get("amount", 0) < 0 else 1
+                    splits_preview = []
+                    for pname, iamt in zip(amazon_record.product_names, amazon_record.item_amounts):
+                        splits_preview.append({"amount": int(round(iamt * 100)) * sign, "notes": pname})
+                    parent_amount = transaction.get("amount", 0)
+                    sub_sum = sum(s["amount"] for s in splits_preview)
+                    if sub_sum != parent_amount:
+                        splits_preview[-1]["amount"] += (parent_amount - sub_sum)
+                    ccy = getattr(amazon_record, 'currency', 'GBP')
+                    print(f"  SPLIT: Would create {len(splits_preview)} sub-transactions:")
+                    for idx, sp in enumerate(splits_preview):
+                        print(f"    Sub {idx+1}: {ccy} {abs(sp['amount'])/100:.2f} \u2014 {sp['notes'][:80]}")
             updated_count += 1
         else:
             # Actually update the transaction
@@ -955,6 +1019,30 @@ Examples:
                 api.update_transaction(transaction["id"], new_notes)
                 print(f"Updated transaction {transaction['id']}")
                 updated_count += 1
+                # Create splits for multi-item orders
+                if hasattr(amazon_record, 'product_names') and len(amazon_record.product_names) > 1:
+                    if transaction.get("is_parent"):
+                        print(f"  Already split \u2014 skipping split creation")
+                    else:
+                        account_id = transaction.get("account", "")
+                        trans_date = transaction.get("date", "")
+                        payee_id = transaction.get("payee", "")
+                        sign = -1 if transaction.get("amount", 0) < 0 else 1
+                        splits = []
+                        for pname, iamt in zip(amazon_record.product_names, amazon_record.item_amounts):
+                            splits.append({"amount": int(round(iamt * 100)) * sign, "notes": pname})
+                        # Correct rounding: adjust last sub so sum matches parent exactly
+                        parent_amount = transaction.get("amount", 0)
+                        sub_sum = sum(s["amount"] for s in splits)
+                        if sub_sum != parent_amount:
+                            splits[-1]["amount"] += (parent_amount - sub_sum)
+                        try:
+                            api.split_transaction(transaction["id"], account_id, trans_date, payee_id, splits)
+                            print(f"  Split into {len(splits)} sub-transactions")
+                            split_count += 1
+                        except Exception as e:
+                            print(f"  Error splitting {transaction['id']}: {e}", file=sys.stderr)
+                            error_count += 1
             except Exception as e:
                 print(f"Error updating transaction {transaction['id']}: {e}", file=sys.stderr)
                 error_count += 1
@@ -965,6 +1053,7 @@ Examples:
     print(f"  Total matches found: {len(all_matches)}")
     print(f"  Records updated: {updated_count}")
     print(f"  Records skipped (already processed): {skipped_count}")
+    print(f"  Transactions split: {split_count}")
     if error_count > 0:
         print(f"  Errors: {error_count}", file=sys.stderr)
     if dry_run:

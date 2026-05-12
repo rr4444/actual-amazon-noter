@@ -1,5 +1,8 @@
 # actual-amazon-noter
 Add tags to Actual Budget notes based on Amazon order history
+
+Forked to make SPLIT TRANSACTIONS automatically (ACTUAL BUDGET RULES WERE INSUFFICIENTLY DYNAMIC TO ACHIEVE THIS)
+
 # actual-amazon-noter
 
 A Python script to update the "notes" field of records in Actual Budget with Amazon purchase details.

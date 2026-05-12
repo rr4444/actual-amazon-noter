@@ -19,6 +19,8 @@ AND
 
 A single transaction in Actual Budget for an Amazon purchase may correspond to multiple lines in the Amazon order history, as an Amazon purchase may be fulfilled by multiple vendors. This program will sum up the cost of each line item in the order history that shares a common Order Id. If a match is found with an Actual Budget transaction, the Notes field is updated with enough detail to allow the transaction to be split between multiple budgets.
 
+As of **v2.0.0**, the script also natively utilizes Actual Budget's Split Transactions feature via the REST API. If a multi-item order is detected, it converts the parent transaction into a structural split (`is_parent: true`) and creates individual sub-transactions (`is_child: true`) with exact amounts, inherited payees, and corresponding notes for each individual Amazon product. It correctly balances the sub-transactions to ensure they sum perfectly to the parent total.
+
 For example, if the Amazon Order_History.csv file contained (highly simplified):
 ```
     Order ID,Description,Cost
@@ -34,9 +36,13 @@ This would be consider a single purchase of $156.98. If this matched a transacti
     #Amazon-Product-Name-Split-2 3/4HP Ryobi Router #Amazon-Product-Cost-Split-2 $59.99
     #Amazon-Product-Name-Split-3 CISCO 1900 Router #Amazon-Product-Cost-Split-3 $95.00
 ```
-(all as a single line, appended to the existing Notes data).
+(all as a single line, appended to the existing Notes data). The script dynamically detects the currency from your Amazon CSV (defaulting to GBP instead of hardcoded USD).
 
-This allows the transaction in Actual Budget to be split between different categories (groceries, woodworking, computing). The presence of the string "Split-" in the tags allows for regular expression rules in Actual Budget to recognize and act on the tagged data.
+In addition to updating the notes, **the transaction will structurally become a split transaction** with three sub-transactions in your Actual Budget UI, each pre-filled with the item's cost and product name, leaving the categories empty for you to classify manually.
+
+This allows the transaction in Actual Budget to be split between different categories (groceries, woodworking, computing).
+
+**Marketplace Orders:** The script now checks for `Amz` substrings as well as `Amazon`, which natively catches `Amznmktplace` (Amazon Marketplace) orders. Marketplace purchases are frequently fulfilled by multiple vendors in a single transaction, making the split transaction feature particularly useful here.
 ## Requirements
 
 - Python 3.7 or higher

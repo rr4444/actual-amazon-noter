@@ -116,6 +116,18 @@ Untested:
 * Correlation against order  data from Digital_Content_Orders.csv
 
 ## Recent Additions
+
+### Split Transactions via API (v2.0.0)
+The script now natively interacts with the Actual Budget REST API to structurally split transactions for multi-item orders.
+- Uses `is_parent: true` and `subtransactions` properties to build splits directly into Actual Budget.
+- Idempotent execution (skips split generation if `is_parent` is already true).
+- Balances any rounding issues by adjusting the final sub-transaction to perfectly match the parent.
+- Inherits the `payee` UUID from the parent transaction for each sub-transaction.
+
+### Amazon Marketplace & Dynamic Currency (v2.0.0)
+- The payee match now checks for "Amz" allowing it to capture `Amznmktplace` transactions, which are commonly multi-item orders.
+- Currency (GBP or USD) is extracted directly from the Amazon CSV instead of being hardcoded to `$`, ensuring dry-runs and split notes appear localized to your store context.
+
 ### Custom Tags Option (-t)
 Added command-line option `-t` (or `--tag`) to allow users to add custom tags to matching transactions.
 

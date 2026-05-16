@@ -335,7 +335,16 @@ class ActualBudgetAPI:
             json={"transaction": {"notes": notes}}
         )
         response.raise_for_status()
+        response.raise_for_status()
         return response.json()
+
+    def delete_transaction(self, transaction_id: str) -> None:
+        """
+        Delete a transaction (or subtransaction) by ID.
+        """
+        endpoint = f"{self.url}/v1/budgets/{self.sync_id}/transactions/{transaction_id}"
+        response = self.session.delete(endpoint)
+        response.raise_for_status()
 
 
 def parse_config_file(file_path: str) -> dict:
@@ -952,7 +961,16 @@ Examples:
     
     # Get transactions with "Amazon" in payee
     print("Fetching transactions from Actual Budget...")
-    transactions = api.get_transactions_by_payee_contains("Amazon") + api.get_transactions_by_payee_contains("Amz")
+    all_transactions = api.get_all_transactions()
+    search_lower = "amazon"
+    search_lower2 = "amz"
+    transactions = [
+        t for t in all_transactions
+        if search_lower in (t.get("payee_name") or "").lower() or
+           search_lower in (t.get("imported_payee") or "").lower() or
+           search_lower2 in (t.get("payee_name") or "").lower() or
+           search_lower2 in (t.get("imported_payee") or "").lower()
+    ]
     print(f"Found {len(transactions)} transactions with 'Amazon' in payee")
     
     # Categorize Amazon records (withdrawals vs income/refunds)
@@ -1024,6 +1042,14 @@ Examples:
                     if transaction.get("is_parent") and not args.force:
                         print(f"  Already split \u2014 skipping split creation")
                     else:
+                        if transaction.get("is_parent") and args.force:
+                            print(f"  Already split \u2014 --force used, recreating splits...")
+                            children = [t for t in all_transactions if t.get("parent_id") == transaction["id"]]
+                            for child in children:
+                                try:
+                                    api.delete_transaction(child["id"])
+                                except Exception:
+                                    pass
                         account_id = transaction.get("account", "")
                         trans_date = transaction.get("date", "")
                         payee_id = transaction.get("payee", "")

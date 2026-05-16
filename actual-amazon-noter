@@ -997,7 +997,7 @@ Examples:
                 print_dry_run_json(transaction, amazon_record, original_notes, new_notes)
             # Show split preview for multi-item orders
             if hasattr(amazon_record, 'product_names') and len(amazon_record.product_names) > 1:
-                if transaction.get("is_parent"):
+                if transaction.get("is_parent") and not args.force:
                     print(f"  [SKIP SPLIT] Already a split transaction")
                 else:
                     sign = -1 if transaction.get("amount", 0) < 0 else 1
@@ -1021,7 +1021,7 @@ Examples:
                 updated_count += 1
                 # Create splits for multi-item orders
                 if hasattr(amazon_record, 'product_names') and len(amazon_record.product_names) > 1:
-                    if transaction.get("is_parent"):
+                    if transaction.get("is_parent") and not args.force:
                         print(f"  Already split \u2014 skipping split creation")
                     else:
                         account_id = transaction.get("account", "")

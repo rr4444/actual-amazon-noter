@@ -280,7 +280,7 @@ class ActualBudgetAPI:
         ]
 
     def split_transaction(self, transaction_id: str, account_id: str, date: str,
-                          payee_id: str, splits: list) -> dict:
+                          payee_id: str, splits: list, existing_children: list = None) -> dict:
         """
         Convert a transaction into a split parent with sub-transactions.
 
@@ -296,7 +296,7 @@ class ActualBudgetAPI:
             API response dictionary
         """
         subtransactions = []
-        for s in splits:
+        for i, s in enumerate(splits):
             sub = {
                 "amount": s["amount"],
                 "account": account_id,
@@ -308,6 +308,8 @@ class ActualBudgetAPI:
             }
             if payee_id:
                 sub["payee"] = payee_id
+            if existing_children and i < len(existing_children):
+                sub["id"] = existing_children[i]["id"]
             subtransactions.append(sub)
 
         endpoint = f"{self.url}/v1/budgets/{self.sync_id}/transactions/{transaction_id}"
@@ -1042,14 +1044,10 @@ Examples:
                     if transaction.get("is_parent") and not args.force:
                         print(f"  Already split \u2014 skipping split creation")
                     else:
+                        children = []
                         if transaction.get("is_parent") and args.force:
                             print(f"  Already split \u2014 --force used, recreating splits...")
                             children = [t for t in all_transactions if t.get("parent_id") == transaction["id"]]
-                            for child in children:
-                                try:
-                                    api.delete_transaction(child["id"])
-                                except Exception:
-                                    pass
                         account_id = transaction.get("account", "")
                         trans_date = transaction.get("date", "")
                         payee_id = transaction.get("payee", "")
@@ -1063,7 +1061,7 @@ Examples:
                         if sub_sum != parent_amount:
                             splits[-1]["amount"] += (parent_amount - sub_sum)
                         try:
-                            api.split_transaction(transaction["id"], account_id, trans_date, payee_id, splits)
+                            api.split_transaction(transaction["id"], account_id, trans_date, payee_id, splits, children)
                             print(f"  Split into {len(splits)} sub-transactions")
                             split_count += 1
                         except Exception as e:

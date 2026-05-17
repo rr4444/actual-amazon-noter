@@ -280,7 +280,7 @@ class ActualBudgetAPI:
         ]
 
     def split_transaction(self, transaction_id: str, account_id: str, date: str,
-                          payee_id: str, splits: list, existing_children: list = None) -> dict:
+                          payee_id: str, splits: list) -> dict:
         """
         Convert a transaction into a split parent with sub-transactions.
 
@@ -308,17 +308,19 @@ class ActualBudgetAPI:
             }
             if payee_id:
                 sub["payee"] = payee_id
-            if existing_children and i < len(existing_children):
-                sub["id"] = existing_children[i]["id"]
             subtransactions.append(sub)
 
         endpoint = f"{self.url}/v1/budgets/{self.sync_id}/transactions/{transaction_id}"
+        payload = {"transaction": {"is_parent": True, "subtransactions": subtransactions}}
+        print(f"  [DEBUG] PATCH payload for {transaction_id}: {json.dumps(payload, indent=2)}")
         response = self.session.patch(
             endpoint,
-            json={"transaction": {"is_parent": True, "subtransactions": subtransactions}}
+            json=payload
         )
         response.raise_for_status()
-        return response.json()
+        resp_json = response.json()
+        print(f"  [DEBUG] PATCH response: {json.dumps(resp_json, indent=2)}")
+        return resp_json
 
     def update_transaction(self, transaction_id: str, notes: str) -> dict:
         """
@@ -336,7 +338,6 @@ class ActualBudgetAPI:
             endpoint,
             json={"transaction": {"notes": notes}}
         )
-        response.raise_for_status()
         response.raise_for_status()
         return response.json()
 
@@ -1048,20 +1049,31 @@ Examples:
                         if transaction.get("is_parent") and args.force:
                             print(f"  Already split \u2014 --force used, recreating splits...")
                             children = [t for t in all_transactions if t.get("parent_id") == transaction["id"]]
+                            for child in children:
+                                try:
+                                    print(f"  [DEBUG] Deleting old child {child['id']}...")
+                                    api.delete_transaction(child["id"])
+                                except Exception as e:
+                                    print(f"  [DEBUG] Failed to delete child {child['id']}: {e}")
                         account_id = transaction.get("account", "")
                         trans_date = transaction.get("date", "")
                         payee_id = transaction.get("payee", "")
                         sign = -1 if transaction.get("amount", 0) < 0 else 1
                         splits = []
                         for pname, iamt in zip(amazon_record.product_names, amazon_record.item_amounts):
-                            splits.append({"amount": int(round(iamt * 100)) * sign, "notes": pname})
+                            amt = int(round(iamt * 100)) * sign
+                            splits.append({"amount": amt, "notes": pname})
+                            print(f"  [DEBUG] Sub: {pname[:60]}  raw_amt={iamt}  calculated={amt}")
                         # Correct rounding: adjust last sub so sum matches parent exactly
                         parent_amount = transaction.get("amount", 0)
                         sub_sum = sum(s["amount"] for s in splits)
                         if sub_sum != parent_amount:
-                            splits[-1]["amount"] += (parent_amount - sub_sum)
+                            adj = parent_amount - sub_sum
+                            splits[-1]["amount"] += adj
+                            print(f"  [DEBUG] Rounding adjustment: {adj} (parent={parent_amount}, sub_sum={sub_sum})")
+                        print(f"  [DEBUG] Final splits: {[(s['amount'], s['notes'][:40]) for s in splits]}")
                         try:
-                            api.split_transaction(transaction["id"], account_id, trans_date, payee_id, splits, children)
+                            api.split_transaction(transaction["id"], account_id, trans_date, payee_id, splits)
                             print(f"  Split into {len(splits)} sub-transactions")
                             split_count += 1
                         except Exception as e:

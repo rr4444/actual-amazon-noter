@@ -1044,17 +1044,56 @@ Examples:
                 if hasattr(amazon_record, 'product_names') and len(amazon_record.product_names) > 1:
                     if transaction.get("is_parent") and not args.force:
                         print(f"  Already split \u2014 skipping split creation")
-                    else:
-                        children = []
-                        if transaction.get("is_parent") and args.force:
-                            print(f"  Already split \u2014 --force used, recreating splits...")
-                            children = [t for t in all_transactions if t.get("parent_id") == transaction["id"]]
-                            for child in children:
+                    elif transaction.get("is_parent") and args.force:
+                        # Update existing children in-place by PATCHing each one
+                        print(f"  Already split \u2014 --force used, updating child amounts...")
+                        existing_children = transaction.get("subtransactions", [])
+                        if not existing_children:
+                            # Fallback: fetch the individual transaction to get nested subtransactions
+                            print(f"  [DEBUG] subtransactions not in list response, fetching individual transaction...")
+                            try:
+                                endpoint = f"{api.url}/v1/budgets/{api.sync_id}/transactions/{transaction['id']}"
+                                resp = api.session.get(endpoint)
+                                resp.raise_for_status()
+                                fetched = resp.json().get("data", {})
+                                existing_children = fetched.get("subtransactions", [])
+                                print(f"  [DEBUG] Fetched transaction response keys: {list(fetched.keys())}")
+                                print(f"  [DEBUG] Full fetched transaction: {json.dumps(fetched, indent=2)}")
+                            except Exception as e:
+                                print(f"  [DEBUG] Failed to fetch transaction: {e}")
+                        print(f"  [DEBUG] Found {len(existing_children)} existing children")
+                        sign = -1 if transaction.get("amount", 0) < 0 else 1
+                        new_amounts = []
+                        for pname, iamt in zip(amazon_record.product_names, amazon_record.item_amounts):
+                            amt = int(round(iamt * 100)) * sign
+                            new_amounts.append({"amount": amt, "notes": pname})
+                            print(f"  [DEBUG] Sub: {pname[:60]}  raw_amt={iamt}  calculated={amt}")
+                        # Correct rounding
+                        parent_amount = transaction.get("amount", 0)
+                        sub_sum = sum(s["amount"] for s in new_amounts)
+                        if sub_sum != parent_amount:
+                            adj = parent_amount - sub_sum
+                            new_amounts[-1]["amount"] += adj
+                            print(f"  [DEBUG] Rounding adjustment: {adj} (parent={parent_amount}, sub_sum={sub_sum})")
+                        # PATCH each existing child with the correct amount
+                        for i, child in enumerate(existing_children):
+                            if i < len(new_amounts):
+                                child_id = child.get("id")
+                                new_amt = new_amounts[i]["amount"]
+                                new_note = new_amounts[i]["notes"]
+                                old_amt = child.get("amount", 0)
+                                print(f"  [DEBUG] Updating child {child_id}: amount {old_amt} -> {new_amt}")
                                 try:
-                                    print(f"  [DEBUG] Deleting old child {child['id']}...")
-                                    api.delete_transaction(child["id"])
+                                    endpoint = f"{api.url}/v1/budgets/{api.sync_id}/transactions/{child_id}"
+                                    resp = api.session.patch(endpoint, json={"transaction": {"amount": new_amt, "notes": new_note}})
+                                    resp.raise_for_status()
+                                    print(f"  [DEBUG] Child {child_id} updated: {resp.json()}")
                                 except Exception as e:
-                                    print(f"  [DEBUG] Failed to delete child {child['id']}: {e}")
+                                    print(f"  [DEBUG] Failed to update child {child_id}: {e}")
+                                    error_count += 1
+                        split_count += 1
+                    else:
+                        # First-time split creation
                         account_id = transaction.get("account", "")
                         trans_date = transaction.get("date", "")
                         payee_id = transaction.get("payee", "")

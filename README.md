@@ -1,9 +1,14 @@
 # actual-amazon-noter
-Add tags to Actual Budget notes based on Amazon order history
 
-Forked to make SPLIT TRANSACTIONS automatically (ACTUAL BUDGET RULES WERE INSUFFICIENTLY DYNAMIC TO ACHIEVE THIS)
-
-# actual-amazon-noter
+> **⚡ Web Uploader & Structural Split Transactions Fork**
+>
+> This fork extends the original `actual-amazon-noter` script to move beyond manual local execution and simple text tagging, offering robust structural transaction splitting and a premium centralized web interface.
+>
+> ### ✨ Key Fork Enhancements:
+> * 🔗 **Structural Split Transactions**: Multi-item Amazon orders are automatically split into structural sub-transactions in your Actual Budget UI, pre-filled with correct individual product prices and notes.
+> * 🌐 **Premium Web Companion (GUI)**: Deploys a gorgeous glassmorphism web dashboard featuring a drag-and-drop CSV uploader, execution/dry-run controls, in-cluster diagnostics, and a live-streaming dark terminal logs viewer.
+> * 💷 **UK & Multi-Currency Support**: Dynamically detects purchase currency (such as GBP or EUR) from your Amazon data export, rather than defaulting to hardcoded USD.
+> * 📦 **Docker & In-Cluster Orchestration**: Built to be containerized and securely deployed node-independently behind Traefik Basic Auth inside K3s/Kubernetes.
 
 A Python script to update the "notes" field of records in Actual Budget with Amazon purchase details.
 

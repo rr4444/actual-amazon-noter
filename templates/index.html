@@ -483,7 +483,7 @@
         </div>
     </main>
     <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
-        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a href="/diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
     </footer>
 </div>
 
@@ -580,7 +580,7 @@
         formData.append('days', document.getElementById('daysInput').value);
 
         try {
-            const response = await fetch('/process', {
+            const response = await fetch('process', {
                 method: 'POST',
                 body: formData
             });

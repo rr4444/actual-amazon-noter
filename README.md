@@ -273,6 +273,111 @@ actual-amazon-noter --actual-http-api-file config.txt \
 
 ### Example 3: Preview changes before executing
 
+```bash
+actual-amazon-noter --dry-run json Order_History.csv
+```
+
+---
+
+## ☸️ Kubernetes Deployment Manifests (Sanitized)
+
+To deploy the web companion persistently in your Kubernetes (e.g. K3s) cluster, you can use the following sanitized manifests. It mounts your budget secrets and exposes the service behind a Traefik IngressRoute protected by Basic Authentication.
+
+### 1. IngressRoute & Middleware Configuration (Traefik)
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: actual-amazon-noter-strip
+  namespace: finance
+spec:
+  stripPrefix:
+    prefixes:
+      - /actual-amazon-noter
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: actual-ingress
+  namespace: finance
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Rule for the main Actual Budget server
+    - match: Host(`actual.example.com`)
+      kind: Rule
+      services:
+        - name: actual-server
+          port: 5006
+          namespace: finance
+    # Rule routing /actual-amazon-noter to the companion web app
+    - match: Host(`actual.example.com`) && PathPrefix(`/actual-amazon-noter`)
+      kind: Rule
+      middlewares:
+        - name: actual-sync-auth              # HTTP Basic Auth middleware reference
+          namespace: finance
+        - name: actual-amazon-noter-strip     # Strip path prefix before forwarding to Flask
+          namespace: finance
+      services:
+        - name: actual-amazon-noter
+          port: 8080
+          namespace: finance
+```
+
+### 2. Deployment & Service Configuration
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actual-amazon-noter
+  namespace: finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: actual-amazon-noter
+  template:
+    metadata:
+      labels:
+        app: actual-amazon-noter
+    spec:
+      containers:
+      - name: uploader
+        image: custom-actual-amazon-noter:1.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ACTUAL_HTTP_API_URL
+          value: "http://actual-http-api:5007"
+        - name: ACTUAL_HTTP_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: finance-secrets
+              key: ACTUAL_HTTP_API_KEY
+        - name: ACTUAL_SYNCID
+          value: "YOUR-BUDGET-SYNC-ID"
+        - name: ACTUAL_BUDGETID
+          value: "YOUR-BUDGET-SYNC-ID"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: actual-amazon-noter
+  namespace: finance
+spec:
+  selector:
+    app: actual-amazon-noter
+  ports:
+    - port: 8080
+      targetPort: 8080
+```
+
+---
+
 ## License
 
 MIT.

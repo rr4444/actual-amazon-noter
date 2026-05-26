@@ -17,4 +17,4 @@ EXPOSE 8080
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "app:app"]
+CMD ["gunicorn", "-w", "2", "-t", "300", "-b", "0.0.0.0:8080", "app:app"]

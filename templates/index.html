@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Noter — Actual Budget Companion</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0f14;
+            --card-bg: rgba(22, 28, 45, 0.4);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.35);
+            --accent: #d946ef;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(217, 70, 239, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 1rem;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 850px;
+            z-index: 10;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            animation: fadeInDown 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        .app-badge {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 40%, #e2e8f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .setting-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .setting-card:hover {
+            border-color: rgba(139, 92, 246, 0.3);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .setting-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .setting-desc {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            line-height: 1.3;
+        }
+
+        /* Toggle Switches */
+        .switch-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .3s cubic-bezier(0.16, 1, 0.3, 1);
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .3s cubic-bezier(0.16, 1, 0.3, 1);
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary);
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        /* Number input */
+        .number-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: white;
+            padding: 0.5rem 0.75rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .number-input:focus {
+            border-color: var(--primary);
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.01);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--primary);
+            background: rgba(139, 92, 246, 0.04);
+            box-shadow: 0 0 30px rgba(139, 92, 246, 0.1);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+
+        .drop-zone:hover .drop-zone-icon {
+            transform: translateY(-5px);
+        }
+
+        .drop-zone-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .drop-zone-subtext {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .file-info {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            max-width: fit-content;
+            margin: 1rem auto 0;
+            animation: scaleIn 0.3s ease;
+        }
+
+        .file-info-icon {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1.1rem;
+            border: none;
+            border-radius: 14px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: white;
+            cursor: pointer;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        /* Log Terminal */
+        .terminal {
+            margin-top: 2rem;
+            background: #07080b;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            overflow: hidden;
+            display: none;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+            animation: slideDown 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .terminal-header {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .terminal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            box-shadow: 0 0 8px var(--primary-glow);
+        }
+
+        .terminal-dot.success { background-color: var(--success); box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+        .terminal-dot.running { animation: pulse 1s infinite alternate; }
+
+        .terminal-body {
+            padding: 1.5rem;
+            max-height: 450px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #d1d5db;
+        }
+
+        .terminal-body pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* Custom syntax highlight tags inside logs */
+        .log-match { color: var(--success); }
+        .log-split { color: #818cf8; }
+        .log-skip { color: var(--warning); font-weight: 500; }
+        .log-error { color: var(--danger); font-weight: 600; }
+        .log-info { color: #38bdf8; }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; max-height: 0; }
+            to { opacity: 1; max-height: 600px; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            from { opacity: 0.4; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <span class="app-badge">Actual Budget Companion</span>
+        <h1>Amazon Noter</h1>
+        <p class="subtitle">Correlate and split Amazon order exports seamlessly</p>
+    </header>
+
+    <main class="glass-card">
+        <form id="uploadForm">
+            <!-- Settings panel -->
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <div>
+                        <div class="setting-title">Dry Run Mode</div>
+                        <div class="setting-desc">Preview matches and item splits without modifying the database.</div>
+                    </div>
+                    <div class="switch-container">
+                        <label class="switch">
+                            <input type="checkbox" id="dryRunToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-card">
+                    <div>
+                        <div class="setting-title">Force Recalculation</div>
+                        <div class="setting-desc">Overwrite existing Amazon tags on previously processed transactions.</div>
+                    </div>
+                    <div class="switch-container">
+                        <label class="switch">
+                            <input type="checkbox" id="forceToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-card">
+                    <div>
+                        <div class="setting-title">Date Tolerance</div>
+                        <div class="setting-desc">Max days the budget transaction date can occur after the order date.</div>
+                    </div>
+                    <input type="number" id="daysInput" class="number-input" value="3" min="0" max="30">
+                </div>
+            </div>
+
+            <!-- Drag and Drop uploader -->
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📦</div>
+                <div class="drop-zone-text">Drag & Drop Amazon CSV file here</div>
+                <div class="drop-zone-subtext">Supports Order History, Digital Content, or Refunds CSVs</div>
+                <input type="file" id="fileInput" accept=".csv" style="display: none;">
+                
+                <div class="file-info" id="fileInfo">
+                    <span class="file-info-icon">📄</span>
+                    <span id="fileName">No file chosen</span>
+                </div>
+            </div>
+
+            <!-- Run Button -->
+            <button type="submit" class="btn" id="submitBtn" disabled>
+                <div class="btn-spinner" id="btnSpinner"></div>
+                <span id="btnText">Process Amazon CSV</span>
+            </button>
+        </form>
+
+        <!-- Log Terminal Output -->
+        <div class="terminal" id="logTerminal">
+            <div class="terminal-header">
+                <div class="terminal-title">
+                    <div class="terminal-dot running" id="terminalDot"></div>
+                    <span>Console Log Output</span>
+                </div>
+            </div>
+            <div class="terminal-body">
+                <pre id="logContent">Preparing processor...</pre>
+            </div>
+        </div>
+    </main>
+    <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a href="/diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+    </footer>
+</div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnSpinner = document.getElementById('btnSpinner');
+    const btnText = document.getElementById('btnText');
+    const uploadForm = document.getElementById('uploadForm');
+    const logTerminal = document.getElementById('logTerminal');
+    const logContent = document.getElementById('logContent');
+    const terminalDot = document.getElementById('terminalDot');
+
+    let selectedFile = null;
+
+    // Trigger click on file input
+    dropZone.addEventListener('click', (e) => {
+        if (e.target !== fileInput) {
+            fileInput.click();
+        }
+    });
+
+    // Handle selected file via input
+    fileInput.addEventListener('change', (e) => {
+        if (fileInput.files.length > 0) {
+            handleFile(fileInput.files[0]);
+        }
+    });
+
+    // Drag over effects
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    ['dragleave', 'dragend'].forEach(type => {
+        dropZone.addEventListener(type, () => {
+            dropZone.classList.remove('dragover');
+        });
+    });
+
+    // Drop file
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        if (file.name.endsWith('.csv')) {
+            selectedFile = file;
+            fileName.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            fileInfo.style.display = 'flex';
+            submitBtn.disabled = false;
+        } else {
+            alert('Please select a valid CSV file.');
+        }
+    }
+
+    // Color/Style the logs dynamically for premium observability
+    function colorizeLogs(text) {
+        return text
+            .replace(/(Matching.*|Processing.*)/gi, '<span class="log-info">$1</span>')
+            .replace(/(Error.*|Failed.*|Exception.*)/gi, '<span class="log-error">$1</span>')
+            .replace(/(Split into.*|Split:.*|Would create.*|Sub \d+.*)/gi, '<span class="log-split">$1</span>')
+            .replace(/(Already split.*|Already processed.*|Already a split.*|Records skipped.*)/gi, '<span class="log-skip">$1</span>')
+            .replace(/(Updated transaction.*|Matches found.*|Transactions split.*)/gi, '<span class="log-match">$1</span>');
+    }
+
+    // Submit form and request backend processing
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!selectedFile) return;
+
+        // UI State: Processing
+        submitBtn.disabled = true;
+        btnSpinner.style.display = 'block';
+        btnText.textContent = 'Processing...';
+        
+        // Show terminal
+        logTerminal.style.display = 'block';
+        logContent.innerHTML = 'Connecting to Actual Budget API and running matcher...\n';
+        terminalDot.className = 'terminal-dot running';
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('execute', !document.getElementById('dryRunToggle').checked);
+        formData.append('force', document.getElementById('forceToggle').checked);
+        formData.append('days', document.getElementById('daysInput').value);
+
+        try {
+            const response = await fetch('/process', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                let out = '';
+                if (data.stdout) out += data.stdout;
+                if (data.stderr) out += '\n--- ERRORS/WARNINGS ---\n' + data.stderr;
+                
+                logContent.innerHTML = colorizeLogs(out || 'Execution completed with no output logs.');
+                terminalDot.className = 'terminal-dot success';
+            } else {
+                logContent.innerHTML = `<span class="log-error">Error: ${data.error || 'Server error occurred'}</span>`;
+                terminalDot.className = 'terminal-dot';
+            }
+        } catch (error) {
+            logContent.innerHTML = `<span class="log-error">Error: Failed to connect to server: ${error.message}</span>`;
+            terminalDot.className = 'terminal-dot';
+        } finally {
+            submitBtn.disabled = false;
+            btnSpinner.style.display = 'none';
+            btnText.textContent = 'Process Amazon CSV';
+            logTerminal.scrollIntoView({ behavior: 'smooth' });
+        }
+    });
+</script>
+
+</body>
+</html>

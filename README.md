@@ -46,6 +46,25 @@ In addition to updating the notes, **the transaction will structurally become a 
 This allows the transaction in Actual Budget to be split between different categories (groceries, woodworking, computing).
 
 **Marketplace Orders:** The script now checks for `Amz` substrings as well as `Amazon`, which natively catches `Amznmktplace` (Amazon Marketplace) orders. Marketplace purchases are frequently fulfilled by multiple vendors in a single transaction, making the split transaction feature particularly useful here.
+
+---
+
+## 🌐 Web Companion Interface (GUI)
+
+The project includes a **premium, glassmorphic Web Companion GUI** (`app.py` powered by Flask and Gunicorn) designed for easy central deployment. It removes the need to process Amazon CSVs locally.
+
+### Key Web Features:
+* 📥 **Interactive Drag-and-Drop Uploader**: Easily upload Amazon order history CSV exports directly from your web browser.
+* ⚙️ **On-the-Fly Control Panel**: 
+  * Toggles for **Dry Run** (simulates splits/matching output) and **Execute** (writes modifications directly to Actual Budget).
+  * Toggle for **Force Recalculation** (overwrites existing tags).
+  * Dynamic numerical input to adjust **Date Tolerance** (matching window days).
+* 🖥️ **Real-time Observability Terminal**: An animated dark console that live-streams colorized execution logs, detailing product splits, parent associations, matching status, and errors.
+* 🩺 **In-Cluster Diagnostics**: Accessible via the page footer, providing instant JSON feedback on the health of your `actual-http-api` connection and listing the synchronized budget accounts.
+* 🐳 **Docker-Ready**: Easy to containerize using the included `Dockerfile` and secure behind path-based Traefik reverse proxies using HTTP Basic Authentication.
+
+---
+
 ## Requirements
 
 - Python 3.7 or higher
@@ -77,9 +96,24 @@ pip install .
 ```
 
 ## Running actual-amazon-noter
-Regardless of the installation method, make the file exectuable via ```chmod```, the run it:
 
-```chmod +x actual-amazon-noter
+### Running as a Web Companion (GUI)
+
+You can launch the web interface locally by running:
+
+```bash
+pip install -r requirements.txt
+python3 app.py
+```
+
+Then navigate to `http://localhost:8080` in your web browser. Make sure you have exported your `ACTUAL_HTTP_API_URL`, `ACTUAL_HTTP_API_KEY`, and `ACTUAL_SYNCID` environment variables first (see **Configuration** below).
+
+### Running as a CLI Utility
+
+Regardless of the installation method, make the file executable via ```chmod```, then run it:
+
+```bash
+chmod +x actual-amazon-noter
 ./actual-amazon-noter --help
 ```
 

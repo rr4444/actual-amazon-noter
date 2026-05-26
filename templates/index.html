@@ -429,7 +429,7 @@
 
                 <div class="setting-card">
                     <div>
-                        <div class="setting-title">Force Recalculation</div>
+                        <div class="setting-title">Force Recalculation (--force)</div>
                         <div class="setting-desc">Overwrite existing Amazon tags on previously processed transactions.</div>
                     </div>
                     <div class="switch-container">
@@ -483,7 +483,7 @@
         </div>
     </main>
     <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
-        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
     </footer>
 </div>
 
@@ -501,6 +501,14 @@
     const terminalDot = document.getElementById('terminalDot');
 
     let selectedFile = null;
+    const diagnosticsLink = document.getElementById('diagnosticsLink');
+
+    // Dynamically calculate paths based on current window location to ensure perfect Traefik subpath routing
+    let basePath = window.location.pathname;
+    if (!basePath.endsWith('/')) {
+        basePath += '/';
+    }
+    diagnosticsLink.href = basePath + 'diagnostics';
 
     // Trigger click on file input
     dropZone.addEventListener('click', (e) => {
@@ -580,7 +588,7 @@
         formData.append('days', document.getElementById('daysInput').value);
 
         try {
-            const response = await fetch('process', {
+            const response = await fetch(basePath + 'process', {
                 method: 'POST',
                 body: formData
             });

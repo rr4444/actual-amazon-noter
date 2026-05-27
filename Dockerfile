@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
+# Inject compile-time Git commit hash
+ARG COMMIT_HASH=unknown
+RUN echo $COMMIT_HASH > commit_hash.txt
+
 # Ensure the python script is executable
 RUN chmod +x actual-ecommerce-noter
 

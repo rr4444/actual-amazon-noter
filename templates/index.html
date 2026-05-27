@@ -406,8 +406,8 @@
 <div class="container">
     <header>
         <span class="app-badge">Actual Budget Companion</span>
-        <h1>Amazon Noter</h1>
-        <p class="subtitle">Correlate and split Amazon order exports seamlessly</p>
+        <h1>Multi-Noter</h1>
+        <p class="subtitle">Correlate and split Amazon & PayPal order exports seamlessly</p>
     </header>
 
     <main class="glass-card">
@@ -430,7 +430,7 @@
                 <div class="setting-card">
                     <div>
                         <div class="setting-title">Force Recalculation</div>
-                        <div class="setting-desc">Overwrite existing Amazon tags on previously processed transactions.</div>
+                        <div class="setting-desc">Overwrite existing tags on previously processed transactions.</div>
                     </div>
                     <div class="switch-container">
                         <label class="switch">
@@ -438,6 +438,18 @@
                             <span class="slider"></span>
                         </label>
                     </div>
+                </div>
+
+                <div class="setting-card">
+                    <div>
+                        <div class="setting-title">CSV Source Format</div>
+                        <div class="setting-desc">Select which format of CSV you are uploading.</div>
+                    </div>
+                    <select id="formatSelect" class="number-input" style="width: auto; padding: 8px 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; border-radius: 8px; outline: none; cursor: pointer;">
+                        <option value="auto" style="background: #1e1e2f; color: #fff;">Auto-Detect Format</option>
+                        <option value="amazon" style="background: #1e1e2f; color: #fff;">Amazon (Order History)</option>
+                        <option value="paypal" style="background: #1e1e2f; color: #fff;">PayPal (UK Download)</option>
+                    </select>
                 </div>
 
                 <div class="setting-card">
@@ -452,8 +464,8 @@
             <!-- Drag and Drop uploader -->
             <div class="drop-zone" id="dropZone">
                 <div class="drop-zone-icon">📦</div>
-                <div class="drop-zone-text">Drag & Drop Amazon CSV file here</div>
-                <div class="drop-zone-subtext">Supports Order History, Digital Content, or Refunds CSVs</div>
+                <div class="drop-zone-text" id="dropZoneText">Drag & Drop CSV file here</div>
+                <div class="drop-zone-subtext" id="dropZoneSubtext">Supports Amazon and PayPal exports</div>
                 <input type="file" id="fileInput" accept=".csv" style="display: none;">
                 
                 <div class="file-info" id="fileInfo">
@@ -465,7 +477,7 @@
             <!-- Run Button -->
             <button type="submit" class="btn" id="submitBtn" disabled>
                 <div class="btn-spinner" id="btnSpinner"></div>
-                <span id="btnText">Process Amazon CSV</span>
+                <span id="btnText">Process CSV</span>
             </button>
         </form>
 
@@ -483,7 +495,7 @@
         </div>
     </main>
     <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
-        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-amazon-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-ecommerce-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
     </footer>
 </div>
 
@@ -566,6 +578,26 @@
             .replace(/(Updated transaction.*|Matches found.*|Transactions split.*)/gi, '<span class="log-match">$1</span>');
     }
 
+    const formatSelect = document.getElementById('formatSelect');
+    const getSubmitBtnText = () => {
+        const val = formatSelect.value;
+        if (val === 'amazon') return 'Process Amazon CSV';
+        if (val === 'paypal') return 'Process PayPal CSV';
+        return 'Process CSV';
+    };
+
+    formatSelect.addEventListener('change', () => {
+        if (btnText.textContent !== 'Processing...') {
+            btnText.textContent = getSubmitBtnText();
+        }
+        const daysInput = document.getElementById('daysInput');
+        if (formatSelect.value === 'paypal') {
+            daysInput.value = '7';
+        } else if (formatSelect.value === 'amazon') {
+            daysInput.value = '3';
+        }
+    });
+
     // Submit form and request backend processing
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -586,6 +618,7 @@
         formData.append('execute', !document.getElementById('dryRunToggle').checked);
         formData.append('force', document.getElementById('forceToggle').checked);
         formData.append('days', document.getElementById('daysInput').value);
+        formData.append('format', formatSelect.value);
 
         try {
             const response = await fetch(basePath + 'process', {
@@ -612,7 +645,7 @@
         } finally {
             submitBtn.disabled = false;
             btnSpinner.style.display = 'none';
-            btnText.textContent = 'Process Amazon CSV';
+            btnText.textContent = getSubmitBtnText();
             logTerminal.scrollIntoView({ behavior: 'smooth' });
         }
     });

@@ -68,6 +68,7 @@ def process():
     execute = request.form.get('execute') == 'true'
     force = request.form.get('force') == 'true'
     days = request.form.get('days', '3')
+    fmt = request.form.get('format', 'auto')
 
     # Validate days is an integer
     try:
@@ -85,7 +86,7 @@ def process():
         env = os.environ.copy()
         
         # Build command
-        cmd = ['python3', 'actual-amazon-noter']
+        cmd = ['python3', 'actual-ecommerce-noter']
         if execute:
             cmd.append('--execute')
         else:
@@ -95,6 +96,7 @@ def process():
             cmd.append('--force')
             
         cmd.extend(['--days', str(days_int)])
+        cmd.extend(['--format', fmt])
         cmd.append(temp_path)
 
         # Run subprocess

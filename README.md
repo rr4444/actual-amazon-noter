@@ -1,14 +1,26 @@
-# actual-amazon-noter
+# actual-ecommerce-noter
 
-> **⚡ Web Uploader & Structural Split Transactions Fork**
+> **Unified Multi-Noter Web Companion (Amazon & PayPal)**
 >
-> This fork extends the original `actual-amazon-noter` script to move beyond manual local execution and simple text tagging, offering robust structural transaction splitting and a premium centralized web interface.
+> This fork extends the original script into a unified **Multi-Noter** tool. Beyond manual Amazon local processing, it supports both **Amazon (Order History)** and **PayPal (UK Download) CSV exports**, complete with automated currency conversion mapping, status filtering, and structural split annotations.
 >
-> ### ✨ Key Fork Enhancements:
-> * 🔗 **Structural Split Transactions**: Multi-item Amazon orders are automatically split into structural sub-transactions in your Actual Budget UI, pre-filled with correct individual product prices and notes.
-> * 🌐 **Premium Web Companion (GUI)**: Deploys a gorgeous glassmorphism web dashboard featuring a drag-and-drop CSV uploader, execution/dry-run controls, in-cluster diagnostics, and a live-streaming dark terminal logs viewer.
-> * 💷 **UK & Multi-Currency Support**: Dynamically detects purchase currency (such as GBP or EUR) from your Amazon data export, rather than defaulting to hardcoded USD.
-> * 📦 **Docker & In-Cluster Orchestration**: Built to be containerized and securely deployed node-independently behind Traefik Basic Auth inside K3s/Kubernetes.
+> ### Key Fork Enhancements:
+> * **Structural Split Transactions**: Multi-item purchases are automatically split into sub-transactions in your Actual Budget UI, pre-filled with correct individual product prices and notes.
+> * **PayPal Integration**: Correlates PayPal downloads with Actual Budget transactions. It skips buffer card deposits, filters for `Completed` status, and automatically resolves EUR/USD foreign currency purchases to their GBP equivalents by correlating adjacent General Currency Conversion rows.
+> * **Smart Explicit Format Selection**: Features an explicit **CSV Source Format** dropdown selector in the UI (with command-line `--format amazon|paypal` options) to avoid regional file header ambiguities.
+> * **Web GUI**: Deploys a web dashboard featuring a CSV uploader, execution/dry-run controls, in-cluster diagnostics, and a terminal logs viewer.
+> * **UK & Multi-Currency Support**: Dynamically detects purchase currency (such as GBP or EUR) from your exports, rather than defaulting to hardcoded USD.
+> * **Docker & In-Cluster Orchestration**: Built to be containerized and deployed node-independently behind Traefik Basic Auth inside K3s/Kubernetes.
+
+---
+
+### Design Choice: Why PayPal CSV instead of QuickBooks IIF?
+During the integration planning, we compared **PayPal's Standard CSV** and **QuickBooks IIF** formats. 
+While the IIF format has the advantage of consistent item descriptions (`MEMO`), it has a major drawback: **it completely strips PayPal's unique Transaction IDs and Receipt IDs**. 
+Without these unique hashes, there is no reliable way to prevent duplicate annotations when multiple transactions of the same amount occur on the same day. 
+By choosing the **Standard CSV**, the Multi-Noter can generate precise notes tags anchored by the `#PayPal-Transaction-ID <ID>` hash, guaranteeing **100% duplicate protection and perfect reconciliation safety**.
+
+---
 
 A Python script to update the "notes" field of records in Actual Budget with Amazon purchase details.
 
@@ -54,19 +66,19 @@ This allows the transaction in Actual Budget to be split between different categ
 
 ---
 
-## 🌐 Web Companion Interface (GUI)
+## Web Companion Interface (GUI)
 
-The project includes a **premium, glassmorphic Web Companion GUI** (`app.py` powered by Flask and Gunicorn) designed for easy central deployment. It removes the need to process Amazon CSVs locally.
+The project includes a **Web Companion GUI** (`app.py` powered by Flask and Gunicorn) designed for easy central deployment. It removes the need to process Amazon CSVs locally.
 
 ### Key Web Features:
-* 📥 **Interactive Drag-and-Drop Uploader**: Easily upload Amazon order history CSV exports directly from your web browser.
-* ⚙️ **On-the-Fly Control Panel**: 
+* **Interactive Uploader**: Upload Amazon order history CSV exports directly from your web browser.
+* **On-the-Fly Control Panel**: 
   * Toggles for **Dry Run** (simulates splits/matching output) and **Execute** (writes modifications directly to Actual Budget).
   * Toggle for **Force Recalculation** (overwrites existing tags).
   * Dynamic numerical input to adjust **Date Tolerance** (matching window days).
-* 🖥️ **Real-time Observability Terminal**: An animated dark console that live-streams colorized execution logs, detailing product splits, parent associations, matching status, and errors.
-* 🩺 **In-Cluster Diagnostics**: Accessible via the page footer, providing instant JSON feedback on the health of your `actual-http-api` connection and listing the synchronized budget accounts.
-* 🐳 **Docker-Ready**: Easy to containerize using the included `Dockerfile` and secure behind path-based Traefik reverse proxies using HTTP Basic Authentication.
+* **Terminal Logs Viewer**: Live-streams stdout/stderr logs from the script execution.
+* **Diagnostics**: JSON status feedback on the health of your `actual-http-api` connection.
+* **Deployment**: Dockerized (`Dockerfile`) for hosting behind Traefik proxies.
 
 ---
 
@@ -83,8 +95,8 @@ The project includes a **premium, glassmorphic Web Companion GUI** (`app.py` pow
 
 The script can be run directly without installation:
 
-```chmod +x actual-amazon-noter
-./actual-amazon-noter --help
+```chmod +x actual-ecommerce-noter
+./actual-ecommerce-noter --help
 ```
 
 ### Option 2: Install via pip
@@ -93,14 +105,13 @@ The script can be run directly without installation:
 pip install -r requirements.txt
 ```
 
-
 ### Option 3: Install as a Package
 
 ```bash
 pip install .
 ```
 
-## Running actual-amazon-noter
+## Running actual-ecommerce-noter
 
 ### Running as a Web Companion (GUI)
 
@@ -118,10 +129,9 @@ Then navigate to `http://localhost:8080` in your web browser. Make sure you have
 Regardless of the installation method, make the file executable via ```chmod```, then run it:
 
 ```bash
-chmod +x actual-amazon-noter
-./actual-amazon-noter --help
+chmod +x actual-ecommerce-noter
+./actual-ecommerce-noter --help
 ```
-
 
 ## Configuration
 
@@ -144,7 +154,7 @@ export ACTUAL_SYNCID=your-sync-id
 ### Option 2: Command-Line Arguments
 
 ```bash
-actual-amazon-noter \
+actual-ecommerce-noter \
     --actual-http-api http://localhost:5007 \
     --actual-http-api-key your-secret-key \
     --actual-syncid your-sync-id \
@@ -164,7 +174,7 @@ ACTUAL_SYNCID=your-sync-id
 Then reference it:
 
 ```
-actual-amazon-noter \
+actual-ecommerce-noter \
     --actual-http-api-file config.txt \
     --actual-http-key-file config.txt \
     --actual-syncid-file config.txt \
@@ -177,7 +187,7 @@ Or use the bare string format (one value per file):
 echo "http://localhost:5007" > url.txt
 echo "your-secret-key" > key.txt
 echo "your-sync-id" > syncid.txt
-actual-amazon-noter \
+actual-ecommerce-noter \
     --actual-http-api-file /path/to/url.txt \
     --actual-http-api-key-file /path/to/key.txt \
     --actual-syncid-file /path/to/syncid.txt \
@@ -191,7 +201,7 @@ actual-amazon-noter \
 By default, the script runs in dry-run mode and only displays what changes would be made:
 
 ```bash
-actual-amazon-noter Order_History.csv
+actual-ecommerce-noter Order_History.csv
 ```
 
 ### Execute Changes
@@ -199,15 +209,21 @@ actual-amazon-noter Order_History.csv
 To actually update the records in Actual Budget, use the `--execute` flag:
 
 ```bash
-actual-amazon-noter --execute Order_History.csv
+actual-ecommerce-noter --execute Order_History.csv
 ```
 
 ### Date Tolerance
 
-By default, transactions are matched if the Amazon date is within 3 days before the Actual Budget transaction. Change this with `--days`:
+The maximum number of days the budget transaction date can occur after the purchase/order date. 
+
+* **Amazon (Default: 3 Days)**: Amazon card settlements typically clear fast on standard bank statements.
+* **PayPal (Default: 7 Days)**: Bank transactions for PayPal settlements take up to **a week (7 days)** to settle and clear because PayPal operates as a pass-through wallet (funding transfers, bank clearing delays, eChecks, etc.). 
+
+If you select **PayPal** in the Web GUI or CLI (or it is auto-detected), the default matching tolerance **dynamically shifts to 7 days** automatically to guarantee excellent out-of-the-box match rates. You can explicitly override this with the `--days` flag or GUI input:
 
 ```bash
-actual-amazon-noter --days 7 Order_History.csv
+# Explicitly force a 10-day tolerance window
+actual-ecommerce-noter --days 10 --format paypal Paypal_Download.csv
 ```
 
 ### Force Update
@@ -215,7 +231,7 @@ actual-amazon-noter --days 7 Order_History.csv
 If a transaction already has Amazon tags but you want to replace them:
 
 ```bash
-actual-amazon-noter --force Order_History.csv
+actual-ecommerce-noter --force Order_History.csv
 ```
 
 ## Amazon CSV File Formats
@@ -252,7 +268,7 @@ export ACTUAL_HTTP_API_URL=http://cubanalle:5007
 export ACTUAL_HTTP_API_KEY=ef6678dee3fc4f44b7db53752c63621d
 export ACTUAL_SYNCID=7cb4a210-b87f-4b38-8f07-1380e6c30b3c
 
-actual-amazon-noter --execute Order_History.csv
+actual-ecommerce-noter --execute Order_History.csv
 ```
 
 ### Example 2: Using a config file
@@ -264,7 +280,7 @@ echo "ACTUAL_HTTP_API_KEY=ef6678dee3fc4f44b7db53752c63621d" >> config.txt
 echo "ACTUAL_SYNCID=7cb4a210-b87f-4b38-8f07-1380e6c30b3c" >> config.txt
 
 # Run the tool
-actual-amazon-noter --actual-http-api-file config.txt \
+actual-ecommerce-noter --actual-http-api-file config.txt \
                     --actual-http-key-file config.txt \
                     --actual-syncid-file config.txt \
                     --execute \
@@ -274,12 +290,12 @@ actual-amazon-noter --actual-http-api-file config.txt \
 ### Example 3: Preview changes before executing
 
 ```bash
-actual-amazon-noter --dry-run json Order_History.csv
+actual-ecommerce-noter --dry-run json Order_History.csv
 ```
 
 ---
 
-## ☸️ Kubernetes Deployment Manifests (Sanitized)
+## Kubernetes Deployment Manifests (Sanitized)
 
 To deploy the web companion persistently in your Kubernetes (e.g. K3s) cluster, you can use the following sanitized manifests. It mounts your budget secrets and exposes the service behind a Traefik IngressRoute protected by Basic Authentication.
 
@@ -288,12 +304,12 @@ To deploy the web companion persistently in your Kubernetes (e.g. K3s) cluster, 
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: actual-amazon-noter-strip
+  name: actual-ecommerce-noter-strip
   namespace: finance
 spec:
   stripPrefix:
     prefixes:
-      - /actual-amazon-noter
+      - /actual-ecommerce-noter
 
 ---
 apiVersion: traefik.io/v1alpha1
@@ -312,16 +328,16 @@ spec:
         - name: actual-server
           port: 5006
           namespace: finance
-    # Rule routing /actual-amazon-noter to the companion web app
-    - match: Host(`actual.example.com`) && PathPrefix(`/actual-amazon-noter`)
+    # Rule routing /actual-ecommerce-noter to the companion web app
+    - match: Host(`actual.example.com`) && PathPrefix(`/actual-ecommerce-noter`)
       kind: Rule
       middlewares:
         - name: actual-sync-auth              # HTTP Basic Auth middleware reference
           namespace: finance
-        - name: actual-amazon-noter-strip     # Strip path prefix before forwarding to Flask
+        - name: actual-ecommerce-noter-strip     # Strip path prefix before forwarding to Flask
           namespace: finance
       services:
-        - name: actual-amazon-noter
+        - name: actual-ecommerce-noter
           port: 8080
           namespace: finance
 ```
@@ -331,21 +347,21 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: actual-amazon-noter
+  name: actual-ecommerce-noter
   namespace: finance
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: actual-amazon-noter
+      app: actual-ecommerce-noter
   template:
     metadata:
       labels:
-        app: actual-amazon-noter
+        app: actual-ecommerce-noter
     spec:
       containers:
       - name: uploader
-        image: custom-actual-amazon-noter:1.0.1
+        image: actual-ecommerce-noter:1.0.1
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -366,11 +382,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: actual-amazon-noter
+  name: actual-ecommerce-noter
   namespace: finance
 spec:
   selector:
-    app: actual-amazon-noter
+    app: actual-ecommerce-noter
   ports:
     - port: 8080
       targetPort: 8080

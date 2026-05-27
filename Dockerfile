@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Ensure the python script is executable
-RUN chmod +x actual-amazon-noter
+RUN chmod +x actual-ecommerce-noter
 
 EXPOSE 8080
 

@@ -1,158 +1,58 @@
 # actual-ecommerce-noter
 
-> **Unified Multi-Noter Web Companion (Amazon & PayPal)**
->
-> This fork extends the original script into a unified **Multi-Noter** tool. Beyond manual Amazon local processing, it supports both **Amazon (Order History)** and **PayPal (UK Download) CSV exports**, complete with automated currency conversion mapping, status filtering, and structural split annotations.
->
-> ### Key Fork Enhancements:
-> * **Structural Split Transactions**: Multi-item purchases are automatically split into sub-transactions in your Actual Budget UI, pre-filled with correct individual product prices and notes.
-> * **PayPal Integration**: Correlates PayPal downloads with Actual Budget transactions. It skips buffer card deposits, filters for `Completed` status, and automatically resolves EUR/USD foreign currency purchases to their GBP equivalents by correlating adjacent General Currency Conversion rows.
-> * **Smart Explicit Format Selection**: Features an explicit **CSV Source Format** dropdown selector in the UI (with command-line `--format amazon|paypal` options) to avoid regional file header ambiguities.
-> * **Web GUI**: Deploys a web dashboard featuring a CSV uploader, execution/dry-run controls, in-cluster diagnostics, and a terminal logs viewer.
-> * **UK & Multi-Currency Support**: Dynamically detects purchase currency (such as GBP or EUR) from your exports, rather than defaulting to hardcoded USD.
-> * **Docker & In-Cluster Orchestration**: Built to be containerized and deployed node-independently behind Traefik Basic Auth inside K3s/Kubernetes.
+A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports.
+
+Rather than importing transactions directly into a new ledger (which introduces duplicate overhead and complex currency conversion math), this tool enriches existing bank/card transactions with line-item detail and creates structural split transactions natively using Actual Budget's REST API.
 
 ---
 
-### Design Choice: Why PayPal CSV instead of QuickBooks IIF?
-During the integration planning, we compared **PayPal's Standard CSV** and **QuickBooks IIF** formats. 
-While the IIF format has the advantage of consistent item descriptions (`MEMO`), it has a major drawback: **it completely strips PayPal's unique Transaction IDs and Receipt IDs**. 
-Without these unique hashes, there is no reliable way to prevent duplicate annotations when multiple transactions of the same amount occur on the same day. 
-By choosing the **Standard CSV**, the Multi-Noter can generate precise notes tags anchored by the `#PayPal-Transaction-ID <ID>` hash, guaranteeing **100% duplicate protection and perfect reconciliation safety**.
+## Key Features
+
+- **Structural Split Transactions**: Converts multi-item orders into parent-child split transactions in your Actual Budget UI, pre-populated with exact item prices and individual notes.
+- **PayPal UK Correlation**: Filters for `Completed` status, ignores internal card deposit buffers, and automatically matches EUR/USD foreign currency purchases to their GBP equivalents by correlating adjacent General Currency Conversion entries.
+- **Smart Explicit Format Selection**: Provides explicit dropdown selection in the GUI and a `--format amazon|paypal|auto` flag in the CLI to avoid header schema ambiguities.
+- **Integrated Web Interface**: Features an interactive dashboard with a drag-and-drop CSV uploader, execution controls, dry-run simulation, real-time colorized logs, and raw connection diagnostics.
+- **Multi-Currency Support**: Dynamically extracts currency details from the source CSV to ensure dry-run previews and split notes are accurately localized.
 
 ---
 
-A Python script to update the "notes" field of records in Actual Budget with Amazon purchase details.
+## Design Decisions & Matching Logic
 
-## Overview
+### Why Noting instead of Ledger Imports?
+Ledger imports of e-commerce statements often result in transaction duplication and bypass native bank account feeds. By choosing **Noting**, the tool matches and enriches already imported bank or credit card transactions, preserving the correct, cleared exchange rates and bank statement records.
 
-This tool correlates Amazon transaction records from CSV exports with transactions in Actual Budget, then updates the Notes field with Amazon order details including:
-- Amazon Order ID
-- Order Date
-- Product Name
-- Shipping Address
+### Why Standard PayPal CSV over QuickBooks IIF?
+While the QuickBooks IIF format offers consistent item descriptions, it strips PayPal's unique Transaction and Receipt IDs. Without these hashes, matching is vulnerable to duplicate annotations when multiple transactions of identical amounts occur on the same day. Using the **Standard CSV** allows the tool to generate precise tags anchored by the `#PayPal-Transaction-ID <ID>` hash, ensuring duplicate protection and safety.
 
-The correlation looks:
-- Transactions where the Payee, Imported_Payee, or Notes contains "Amazon"
-AND
-- Transactions within the date window where the billed cost matches the cost of the Amazon order 
+### Dynamic Date Tolerance
+E-commerce bank clearing times vary by payment mechanism:
+- **Amazon (Default: 3 Days)**: Direct credit/debit card transactions typically clear on standard bank statements within 3 days.
+- **PayPal (Default: 7 Days)**: Bank transactions for PayPal settlements take up to **a week (7 days)** because PayPal operates as a pass-through wallet (funding transfers, eChecks, and bank clearing delays).
 
-A single transaction in Actual Budget for an Amazon purchase may correspond to multiple lines in the Amazon order history, as an Amazon purchase may be fulfilled by multiple vendors. This program will sum up the cost of each line item in the order history that shares a common Order Id. If a match is found with an Actual Budget transaction, the Notes field is updated with enough detail to allow the transaction to be split between multiple budgets.
-
-As of **v2.0.0**, the script also natively utilizes Actual Budget's Split Transactions feature via the REST API. If a multi-item order is detected, it converts the parent transaction into a structural split (`is_parent: true`) and creates individual sub-transactions (`is_child: true`) with exact amounts, inherited payees, and corresponding notes for each individual Amazon product. It correctly balances the sub-transactions to ensure they sum perfectly to the parent total.
-
-For example, if the Amazon Order_History.csv file contained (highly simplified):
-```
-    Order ID,Description,Cost
-    12345,Orange juice,$1.99
-    12345,3/4HP Ryobi Router,$59.99
-    12345,CISCO 1900 Router,$95.00
-```
-
-This would be consider a single purchase of $156.98. If this matched a transaction in Actual Budget, the Notes field would be updated to include the tags:
-```
-    #Amazon-Order 12345
-    #Amazon-Product-Name-Split-1 Orange juice #Amazon-Product-Cost-Split-1 $1.99
-    #Amazon-Product-Name-Split-2 3/4HP Ryobi Router #Amazon-Product-Cost-Split-2 $59.99
-    #Amazon-Product-Name-Split-3 CISCO 1900 Router #Amazon-Product-Cost-Split-3 $95.00
-```
-(all as a single line, appended to the existing Notes data). The script dynamically detects the currency from your Amazon CSV (defaulting to GBP instead of hardcoded USD).
-
-In addition to updating the notes, **the transaction will structurally become a split transaction** with three sub-transactions in your Actual Budget UI, each pre-filled with the item's cost and product name, leaving the categories empty for you to classify manually.
-
-This allows the transaction in Actual Budget to be split between different categories (groceries, woodworking, computing).
-
-**Marketplace Orders:** The script now checks for `Amz` substrings as well as `Amazon`, which natively catches `Amznmktplace` (Amazon Marketplace) orders. Marketplace purchases are frequently fulfilled by multiple vendors in a single transaction, making the split transaction feature particularly useful here.
+The tool automatically shifts its matching date tolerance to 7 days when the PayPal format is selected or detected.
 
 ---
-
-## Web Companion Interface (GUI)
-
-The project includes a **Web Companion GUI** (`app.py` powered by Flask and Gunicorn) designed for easy central deployment. It removes the need to process Amazon CSVs locally.
-
-### Key Web Features:
-* **Interactive Uploader**: Upload Amazon order history CSV exports directly from your web browser.
-* **On-the-Fly Control Panel**: 
-  * Toggles for **Dry Run** (simulates splits/matching output) and **Execute** (writes modifications directly to Actual Budget).
-  * Toggle for **Force Recalculation** (overwrites existing tags).
-  * Dynamic numerical input to adjust **Date Tolerance** (matching window days).
-* **Terminal Logs Viewer**: Live-streams stdout/stderr logs from the script execution.
-* **Diagnostics**: JSON status feedback on the health of your `actual-http-api` connection.
-* **Deployment**: Dockerized (`Dockerfile`) for hosting behind Traefik proxies.
-
----
-
-## Requirements
-
-- Python 3.7 or higher
-- `requests` library (for making HTTP calls to actual-http-api)
-- Access to an Actual Budget instance with actual-http-api running
-- CSV file of Amazon purchase history. See https://www.amazonforum.com/s/question/0D5at00000UHvv9CAD/how-to-download-transaction-reports-on-amazon-purchases-by-year for export directions.
-
-## Installation
-
-### Option 1: Direct Execution (No Installation)
-
-The script can be run directly without installation:
-
-```chmod +x actual-ecommerce-noter
-./actual-ecommerce-noter --help
-```
-
-### Option 2: Install via pip
-
-```bash
-pip install -r requirements.txt
-```
-
-### Option 3: Install as a Package
-
-```bash
-pip install .
-```
-
-## Running actual-ecommerce-noter
-
-### Running as a Web Companion (GUI)
-
-You can launch the web interface locally by running:
-
-```bash
-pip install -r requirements.txt
-python3 app.py
-```
-
-Then navigate to `http://localhost:8080` in your web browser. Make sure you have exported your `ACTUAL_HTTP_API_URL`, `ACTUAL_HTTP_API_KEY`, and `ACTUAL_SYNCID` environment variables first (see **Configuration** below).
-
-### Running as a CLI Utility
-
-Regardless of the installation method, make the file executable via ```chmod```, then run it:
-
-```bash
-chmod +x actual-ecommerce-noter
-./actual-ecommerce-noter --help
-```
 
 ## Configuration
 
-The script requires three connection parameters to access the actual-http-api:
+The utility requires connection parameters for your `actual-http-api` instance:
 
-1. **API URL** - The URL of the actual-http-api server (e.g., http://localhost:5007)
-2. **API Key** - The secret key used by actual-http-api
-3. **Sync ID** - The synchronization ID for the budget instance
+1. **API URL** (`ACTUAL_HTTP_API_URL`): The URL of your actual-http-api server (e.g., `http://localhost:5007`).
+2. **API Key** (`ACTUAL_HTTP_API_KEY`): The secret key used by actual-http-api.
+3. **Sync ID** (`ACTUAL_SYNCID`): The synchronization ID for your specific budget.
 
-These can be provided in three ways:
+### Providing Configuration
 
-### Option 1: Environment Variables
+These parameters can be provided via environment variables, CLI flags, or file-based configuration.
 
+#### Option 1: Environment Variables
 ```bash
 export ACTUAL_HTTP_API_URL=http://localhost:5007
 export ACTUAL_HTTP_API_KEY=your-secret-key
 export ACTUAL_SYNCID=your-sync-id
 ```
 
-### Option 2: Command-Line Arguments
-
+#### Option 2: Command-Line Arguments
 ```bash
 actual-ecommerce-noter \
     --actual-http-api http://localhost:5007 \
@@ -161,145 +61,90 @@ actual-ecommerce-noter \
     Order_History.csv
 ```
 
-### Option 3: Configuration Files
-
-Create a file (e.g., `config.txt`) with multiple values:
-
-```
+#### Option 3: Configuration Files (e.g. `config.txt`)
+```ini
 ACTUAL_HTTP_API_URL=http://localhost:5007
 ACTUAL_HTTP_API_KEY=your-secret-key
 ACTUAL_SYNCID=your-sync-id
 ```
-
-Then reference it:
-
-```
-actual-ecommerce-noter \
-    --actual-http-api-file config.txt \
-    --actual-http-key-file config.txt \
-    --actual-syncid-file config.txt \
-    Order_History.csv
-```
-
-Or use the bare string format (one value per file):
-
-```
-echo "http://localhost:5007" > url.txt
-echo "your-secret-key" > key.txt
-echo "your-sync-id" > syncid.txt
-actual-ecommerce-noter \
-    --actual-http-api-file /path/to/url.txt \
-    --actual-http-api-key-file /path/to/key.txt \
-    --actual-syncid-file /path/to/syncid.txt \
-    Order_History.csv
-```
-
-## Usage
-
-### Basic Usage (Dry-Run Mode)
-
-By default, the script runs in dry-run mode and only displays what changes would be made:
-
 ```bash
-actual-ecommerce-noter Order_History.csv
-```
-
-### Execute Changes
-
-To actually update the records in Actual Budget, use the `--execute` flag:
-
-```bash
-actual-ecommerce-noter --execute Order_History.csv
-```
-
-### Date Tolerance
-
-The maximum number of days the budget transaction date can occur after the purchase/order date. 
-
-* **Amazon (Default: 3 Days)**: Amazon card settlements typically clear fast on standard bank statements.
-* **PayPal (Default: 7 Days)**: Bank transactions for PayPal settlements take up to **a week (7 days)** to settle and clear because PayPal operates as a pass-through wallet (funding transfers, bank clearing delays, eChecks, etc.). 
-
-If you select **PayPal** in the Web GUI or CLI (or it is auto-detected), the default matching tolerance **dynamically shifts to 7 days** automatically to guarantee excellent out-of-the-box match rates. You can explicitly override this with the `--days` flag or GUI input:
-
-```bash
-# Explicitly force a 10-day tolerance window
-actual-ecommerce-noter --days 10 --format paypal Paypal_Download.csv
-```
-
-### Force Update
-
-If a transaction already has Amazon tags but you want to replace them:
-
-```bash
-actual-ecommerce-noter --force Order_History.csv
-```
-
-## Amazon CSV File Formats
-
-The only currently supported file format is **Order_History.csv** -- the standard order history (purchases) export
-
-The tool is intended to support these Amazon data export files in the future:
-
-- **Digital_Content_Orders.csv** - Digital content orders
-- **Refund_Details.csv** - Refund details
-- **Digital_Returns.csv** - Digital returns
-
-## Command-Line Options
-
-```
---dry-run [csv|json]    Show changes without updating (default: csv)
---execute               Actually update records in Actual Budget
---days X                Number of days tolerance for matching (default: 3)
---force                 Replace existing Amazon tags
---actual-http-api URL   API server URL
---actual-http-api-file /path/to/file    File containing API URL
---actual-http-api-key SecretKey        API key
---actual-http-api-key-file /path/to/file   File containing API key
---actual-syncid SyncID                  Budget SyncID
---actual-syncid-file /path/to/file      File containing SyncID
-```
-
-## Examples
-
-### Example 1: Using environment variables
-
-```bash
-export ACTUAL_HTTP_API_URL=http://cubanalle:5007
-export ACTUAL_HTTP_API_KEY=ef6678dee3fc4f44b7db53752c63621d
-export ACTUAL_SYNCID=7cb4a210-b87f-4b38-8f07-1380e6c30b3c
-
-actual-ecommerce-noter --execute Order_History.csv
-```
-
-### Example 2: Using a config file
-
-```bash
-# Create config file
-echo "ACTUAL_HTTP_API_URL=http://cubanalle:5007" > config.txt
-echo "ACTUAL_HTTP_API_KEY=ef6678dee3fc4f44b7db53752c63621d" >> config.txt
-echo "ACTUAL_SYNCID=7cb4a210-b87f-4b38-8f07-1380e6c30b3c" >> config.txt
-
-# Run the tool
-actual-ecommerce-noter --actual-http-api-file config.txt \
-                    --actual-http-key-file config.txt \
-                    --actual-syncid-file config.txt \
-                    --execute \
-                    Order_History.csv
-```
-
-### Example 3: Preview changes before executing
-
-```bash
-actual-ecommerce-noter --dry-run json Order_History.csv
+actual-ecommerce-noter --actual-http-api-file config.txt Order_History.csv
 ```
 
 ---
 
-## Kubernetes Deployment Manifests (Sanitized)
+## CLI Usage
 
-To deploy the web companion persistently in your Kubernetes (e.g. K3s) cluster, you can use the following sanitized manifests. It mounts your budget secrets and exposes the service behind a Traefik IngressRoute protected by Basic Authentication.
+### Basic Usage (Dry-Run Mode)
+Runs a dry-run and prints proposed budget matches to stdout:
+```bash
+chmod +x actual-ecommerce-noter
+./actual-ecommerce-noter Order_History.csv
+```
 
-### 1. IngressRoute & Middleware Configuration (Traefik)
+### Execute Changes
+Applies the updates directly to your Actual Budget instance:
+```bash
+./actual-ecommerce-noter --execute Order_History.csv
+```
+
+### Custom Date Tolerance & Format Override
+```bash
+./actual-ecommerce-noter --days 10 --format paypal Paypal_Download.csv
+```
+
+### Custom Tags
+Append custom tags (e.g., `#invoice` or `#follow-up`) to matched transactions:
+```bash
+./actual-ecommerce-noter -t "invoice" -t "needs verification" Order_History.csv
+```
+
+### CLI Options Reference
+```
+--dry-run [csv|json]    Show changes without updating (default: csv)
+--execute               Actually update records in Actual Budget
+--days X                Number of days tolerance for matching
+--format amazon|paypal  Explicitly set the CSV schema format
+--force                 Replace existing e-commerce tags
+--actual-http-api URL   API server URL
+--actual-http-api-file  File containing API URL
+--actual-http-api-key   API key
+--actual-syncid SyncID  Budget Sync ID
+-t, --tag TAG           Custom tag to append (can be specified multiple times)
+```
+
+---
+
+## Web Interface
+
+To host the web dashboard locally:
+```bash
+pip install -r requirements.txt
+python3 app.py
+```
+Access the interface at `http://localhost:8080`.
+
+---
+
+## Kubernetes Deployment Examples
+
+To deploy the web companion persistently in a Kubernetes (or K3s) cluster, follow these steps.
+
+### 1. Build and Import the Image
+Because this companion uses a customized local build, you must build the Docker image and make it available to your Kubernetes nodes before deploying:
+
+```bash
+# Build the image locally
+docker build -t actual-ecommerce-noter:1.0.1 .
+
+# Save and import the image into containerd on your nodes:
+docker save actual-ecommerce-noter:1.0.1 -o actual-ecommerce-noter.tar
+sudo k3s ctr images import actual-ecommerce-noter.tar
+```
+
+### 2. Deployment Manifests
+
+#### Traefik Routing & Middleware
 ```yaml
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -321,20 +166,12 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Rule for the main Actual Budget server
-    - match: Host(`actual.example.com`)
-      kind: Rule
-      services:
-        - name: actual-server
-          port: 5006
-          namespace: finance
-    # Rule routing /actual-ecommerce-noter to the companion web app
     - match: Host(`actual.example.com`) && PathPrefix(`/actual-ecommerce-noter`)
       kind: Rule
       middlewares:
         - name: actual-sync-auth              # HTTP Basic Auth middleware reference
           namespace: finance
-        - name: actual-ecommerce-noter-strip     # Strip path prefix before forwarding to Flask
+        - name: actual-ecommerce-noter-strip
           namespace: finance
       services:
         - name: actual-ecommerce-noter
@@ -342,7 +179,7 @@ spec:
           namespace: finance
 ```
 
-### 2. Deployment & Service Configuration
+#### Deployment & Service
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -374,8 +211,6 @@ spec:
               name: finance-secrets
               key: ACTUAL_HTTP_API_KEY
         - name: ACTUAL_SYNCID
-          value: "YOUR-BUDGET-SYNC-ID"
-        - name: ACTUAL_BUDGETID
           value: "YOUR-BUDGET-SYNC-ID"
 
 ---

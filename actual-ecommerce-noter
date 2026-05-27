@@ -277,7 +277,7 @@ class ActualBudgetAPI:
         self.session = requests.Session()
         self.session.headers.update({
             "Content-Type": "application/json",
-            "x-actual-api-key": key
+            "x-api-key": key
         })
 
     def get_accounts(self) -> list:

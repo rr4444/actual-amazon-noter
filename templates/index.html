@@ -495,7 +495,7 @@
         </div>
     </main>
     <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
-        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-ecommerce-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-ecommerce-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork{% if commit_hash and commit_hash != 'unknown' %} ({{ commit_hash }}){% endif %}</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
     </footer>
 </div>
 

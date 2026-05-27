@@ -6,9 +6,24 @@ from flask import Flask, request, render_template, jsonify
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 
+# Retrieve git commit hash dynamically
+commit_hash = None
+if os.path.exists("commit_hash.txt"):
+    try:
+        with open("commit_hash.txt", "r") as f:
+            commit_hash = f.read().strip()
+    except Exception:
+        pass
+
+if not commit_hash:
+    try:
+        commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        commit_hash = "unknown"
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', commit_hash=commit_hash)
 
 @app.route('/diagnostics')
 def diagnostics():

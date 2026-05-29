@@ -2,7 +2,31 @@
 
 A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports.
 
-Rather than importing transactions directly into a new ledger (which introduces duplicate overhead and complex currency conversion math), this tool enriches existing bank/card transactions with line-item detail and creates structural split transactions natively using Actual Budget's REST API.
+> [!NOTE]
+> This project is a completely independent, production-grade fork of the wonderful [actual-amazon-noter](https://github.com/rmsppu/actual-amazon-noter) by [rmsppu](https://github.com/rmsppu), based on upstream commit [95b0f42](https://github.com/rmsppu/actual-amazon-noter/commit/95b0f42). We thank `rmsppu` for their exceptional foundation!
+
+---
+
+## Fork Enhancements & Release Notes
+
+### Amazon Split & Engine Baseline (v1.1.0)
+* **Expanded Payee Matching**: Dynamically searches `Amz` payees alongside `Amazon` to capture all `Amznmktplace` charges cleanly.
+* **Flexible Date Window**: Allowed a `-2` day date tolerance offset to handle timezone and same-day dispatch differences.
+* **CSV Schema Validation**: Fixed critical CSV header mismatch (`Shipment Address` -> `Shipping Address`).
+* **Multi-Currency Support**: Extracts the currency field directly from the CSV (defaulting to `GBP`) for high-fidelity notes and dry-run previews.
+* **Double-Booking Protection**: Fixed identical-amount duplication bugs via rigorous `used_amazon` set tracking.
+* **Automated Split Transactions**: Adds a powerful `split_transaction` API method to natively create parent-child splits for multi-item orders:
+  * **Idempotency**: Checks `is_parent` before splitting to allow safe duplicate runs, while supporting duplicate items in the same order.
+  * **Precision Rounding**: Performs fraction-of-cent rounding correction on the final sub-transaction to match parent amounts exactly.
+  * **UUID Inheritance**: Split sub-transactions inherit parent payee UUIDs.
+  * **Dry-Run Observability**: Outputs comprehensive split previews with formatted currency amounts and summary counts.
+
+### PayPal Integration & eCommerce Upgrade (v2.1.0)
+* **Unified eCommerce Dashboard**: Frame Amazon and PayPal as core examples of e-commerce noting.
+* **PayPal Integration**: Filters for `Completed` status, ignores internal funding buffers, and maps USD/EUR currency conversions to their GBP bank equivalents.
+* **Payee-Keyword Correlation**: Extracts and matches payee keywords to prevent cross-matching close amounts on adjacent dates (e.g. Roblox vs Lebara).
+* **Configurable Amount Tolerance**: Exposes amount tolerance on both the CLI (`--amount-tolerance`) and GUI card.
+* **Responsive ACTUAL Theme**: Modern, high-performance UI tailored specifically to Actual Budget's deep-navy and violet design colors.
 
 ---
 

@@ -333,6 +333,9 @@ def ai_classify():
             "mode": "Local"
         })
 
+# In-memory cache for K8s logs to prevent losing them when the pod is deleted
+k8s_job_logs_cache = {}
+
 @app.route('/ai/logs/<job_id>')
 def ai_logs(job_id):
     namespace = os.environ.get('ACTUAL_AI_NAMESPACE', 'finance')
@@ -344,14 +347,50 @@ def ai_logs(job_id):
         try:
             config.load_incluster_config()
             core_v1 = client.CoreV1Api()
+            batch_v1 = client.BatchV1Api()
             
-            # Find the pod associated with this job
+            # 1. Check if we already have a cached completed/failed state for this job
+            if job_id in k8s_job_logs_cache:
+                cached = k8s_job_logs_cache[job_id]
+                if cached["status"] in ["success", "failed"]:
+                    return jsonify(cached)
+
+            # 2. Query K8s for the Job status first to see if it failed/completed
+            job_failed = False
+            job_success = False
+            try:
+                job = batch_v1.read_namespaced_job(job_id, namespace)
+                if job.status.failed and job.status.failed > 0:
+                    job_failed = True
+                elif job.status.succeeded and job.status.succeeded > 0:
+                    job_success = True
+            except Exception as e:
+                # If Job resource is completely gone, fallback to cache or report failed
+                if job_id in k8s_job_logs_cache:
+                    return jsonify(k8s_job_logs_cache[job_id])
+                return jsonify({"error": f"Job not found: {str(e)}"}), 404
+
+            # 3. Find the pod associated with this job
             pods = core_v1.list_namespaced_pod(
                 namespace,
                 label_selector=f"job-name={job_id}"
             )
             
             if not pods.items:
+                # If no pods are found, but the Job was marked as failed or success,
+                # we return the cached log (or a failed message if no logs were cached)
+                if job_failed:
+                    logs_msg = k8s_job_logs_cache.get(job_id, {}).get("logs", "Job failed and its pod was deleted before logs could be fully read.")
+                    res = {"status": "failed", "logs": logs_msg}
+                    k8s_job_logs_cache[job_id] = res
+                    return jsonify(res)
+                elif job_success:
+                    logs_msg = k8s_job_logs_cache.get(job_id, {}).get("logs", "Job completed successfully.")
+                    res = {"status": "success", "logs": logs_msg}
+                    k8s_job_logs_cache[job_id] = res
+                    return jsonify(res)
+                
+                # Otherwise, it might be still waiting to create the pod
                 return jsonify({
                     "status": "pending",
                     "logs": f"Job {job_id} has been queued. Waiting for Pod creation..."
@@ -380,10 +419,20 @@ def ai_logs(job_id):
             }
             status = status_map.get(phase, "running")
             
-            return jsonify({
+            # If the job status was checked as failed/success, override phase
+            if job_failed:
+                status = "failed"
+            elif job_success:
+                status = "success"
+
+            # Cache the logs
+            res = {
                 "status": status,
                 "logs": logs_text
-            })
+            }
+            k8s_job_logs_cache[job_id] = res
+            
+            return jsonify(res)
             
         except Exception as e:
             return jsonify({"error": f"Failed to retrieve K8s logs: {str(e)}"}), 500

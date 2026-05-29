@@ -239,6 +239,7 @@ class PaypalOrder:
         self.receipt_id = record.receipt_id
         self.date = record.date
         self.name = record.name
+        self.payee = record.name
         self.currency = record.currency
         self.shipping_address = ""
         self.product_names = [record.item_title] if record.item_title else [record.name]
@@ -488,10 +489,36 @@ def read_paypal_csv(file_path: str) -> tuple:
     return "PayPal_Download", valid_orders
 
 
+def clean_payee_words(payee: str) -> set:
+    if not payee:
+        return set()
+    ignore_words = {"paypal", "payments", "payment", "limited", "ltd", "uk", "group", "co", "corporation", "corp", "inc", "direct", "debit", "bank", "deposit", "to", "account"}
+    words = re.findall(r'[a-z0-9]+', payee.lower())
+    return {w for w in words if w not in ignore_words and len(w) > 1}
+
+
+def payee_matches(budget_payee: str, csv_payee: str) -> bool:
+    budget_words = clean_payee_words(budget_payee)
+    csv_words = clean_payee_words(csv_payee)
+    if not budget_words or not csv_words:
+        return True
+    if budget_words.intersection(csv_words):
+        return True
+    for bw in budget_words:
+        if bw in csv_payee.lower():
+            return True
+    for cw in csv_words:
+        if cw in budget_payee.lower():
+            return True
+    return False
+
+
 def match_transactions(
     transactions: list,
     amazon_records: list,
     days_tolerance: int,
+    amount_tolerance: int,
+    is_paypal: bool = False,
     is_income: bool = False
 ) -> list:
     """Match Actual Budget transactions with aggregated orders (Amazon or PayPal)"""
@@ -533,12 +560,18 @@ def match_transactions(
             if amount < 0:
                 if amazon_amount_cents <= 0:
                     continue
-                if abs(abs(amount) - amazon_amount_cents) > 100:
+                if abs(abs(amount) - amazon_amount_cents) > amount_tolerance:
                     continue
             else:
                 if amazon_amount_cents >= 0:
                     continue
-                if abs(abs(amount) - abs(amazon_amount_cents)) > 100:
+                if abs(abs(amount) - abs(amazon_amount_cents)) > amount_tolerance:
+                    continue
+            
+            if is_paypal:
+                budget_payee = transaction.get("payee_name") or transaction.get("imported_payee") or ""
+                csv_payee = getattr(amazon, 'payee', '') or getattr(amazon, 'name', '') or ''
+                if not payee_matches(budget_payee, csv_payee):
                     continue
             
             date_diff = trans_date - amazon.date
@@ -712,6 +745,12 @@ Examples:
         help=f"Number of days tolerance for date matching (default: {DEFAULT_DAYS_TOLERANCE})"
     )
     parser.add_argument(
+        "--amount-tolerance",
+        type=float,
+        default=None,
+        help="Amount tolerance (e.g. 1.00 or 0.00) for matching transactions. Default: 1.00 for Amazon, 0.00 for PayPal"
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Replace existing tags in notes field"
@@ -807,6 +846,18 @@ Examples:
         days_tolerance = 7
         print(f"PayPal format detected: dynamically adjusting default tolerance to {days_tolerance} days")
 
+    amount_tolerance_val = args.amount_tolerance
+    if amount_tolerance_val is None:
+        if detected_format == "paypal":
+            amount_tolerance = 0
+            print("PayPal format detected: dynamically adjusting default amount tolerance to 0.00")
+        else:
+            amount_tolerance = 100
+            print("Amazon format detected: dynamically adjusting default amount tolerance to 1.00")
+    else:
+        amount_tolerance = int(round(amount_tolerance_val * 100))
+        print(f"Using user-specified amount tolerance of {amount_tolerance_val:.2f} ({amount_tolerance} cents)")
+
     if not all_records:
         print("Error: No transaction records loaded", file=sys.stderr)
         sys.exit(1)
@@ -846,8 +897,8 @@ Examples:
     purchase_records = [r for r in all_records if r.amount > 0]
     refund_records = [r for r in all_records if r.amount < 0]
     
-    purchase_matches = match_transactions(transactions, purchase_records, days_tolerance, is_income=False)
-    refund_matches = match_transactions(transactions, refund_records, days_tolerance, is_income=True)
+    purchase_matches = match_transactions(transactions, purchase_records, days_tolerance, amount_tolerance, is_paypal=(detected_format == "paypal"), is_income=False)
+    refund_matches = match_transactions(transactions, refund_records, days_tolerance, amount_tolerance, is_paypal=(detected_format == "paypal"), is_income=True)
     
     all_matches = purchase_matches + refund_matches
     print(f"Found {len(all_matches)} potential matches")

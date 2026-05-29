@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amazon Noter — Actual Budget Companion</title>
+    <title>eCommerce Noter — Actual Budget Companion</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0d0f14;
-            --card-bg: rgba(22, 28, 45, 0.4);
+            --bg-color: #0c1625;
+            --card-bg: rgba(30, 46, 74, 0.9);
             --border-color: rgba(255, 255, 255, 0.08);
-            --primary: #8b5cf6;
-            --primary-glow: rgba(139, 92, 246, 0.35);
-            --accent: #d946ef;
+            --primary: #9333ea;
+            --primary-glow: rgba(147, 51, 234, 0.35);
+            --accent: #3b82f6;
             --success: #10b981;
             --warning: #f59e0b;
             --danger: #ef4444;
@@ -32,8 +32,8 @@
             font-family: 'Outfit', sans-serif;
             background-color: var(--bg-color);
             background-image: 
-                radial-gradient(at 10% 10%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
-                radial-gradient(at 90% 90%, rgba(217, 70, 239, 0.15) 0px, transparent 50%);
+                radial-gradient(at 10% 10%, rgba(147, 51, 234, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
             background-attachment: fixed;
             color: var(--text-color);
             min-height: 100vh;
@@ -42,6 +42,14 @@
             align-items: center;
             padding: 2rem 1rem;
             overflow-x: hidden;
+        }
+
+        .setting-card.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+            cursor: not-allowed;
+            background: rgba(0, 0, 0, 0.08);
+            border-color: rgba(255, 255, 255, 0.02);
         }
 
         .container {
@@ -406,8 +414,8 @@
 <div class="container">
     <header>
         <span class="app-badge">Actual Budget Companion</span>
-        <h1>Multi-Noter</h1>
-        <p class="subtitle">Correlate and split Amazon & PayPal order exports seamlessly</p>
+        <h1>eCommerce Noter</h1>
+        <p class="subtitle">Correlate and split eCommerce order exports (e.g., Amazon, PayPal) with your budget transactions</p>
     </header>
 
     <main class="glass-card">
@@ -458,6 +466,14 @@
                         <div class="setting-desc">Max days the budget transaction date can occur after the order date.</div>
                     </div>
                     <input type="number" id="daysInput" class="number-input" value="3" min="0" max="30">
+                </div>
+
+                <div class="setting-card">
+                    <div>
+                        <div class="setting-title">Amount Tolerance</div>
+                        <div class="setting-desc">Max absolute amount mismatch in currency units (e.g. 1.00 for Amazon, 0.00 for PayPal).</div>
+                    </div>
+                    <input type="number" id="amountToleranceInput" class="number-input" value="1.00" min="0" max="100" step="0.01">
                 </div>
             </div>
 
@@ -586,17 +602,40 @@
         return 'Process CSV';
     };
 
-    formatSelect.addEventListener('change', () => {
+    function updateGhostedStates() {
         if (btnText.textContent !== 'Processing...') {
             btnText.textContent = getSubmitBtnText();
         }
+        
         const daysInput = document.getElementById('daysInput');
-        if (formatSelect.value === 'paypal') {
-            daysInput.value = '7';
-        } else if (formatSelect.value === 'amazon') {
-            daysInput.value = '3';
+        const amountInput = document.getElementById('amountToleranceInput');
+        const daysCard = daysInput.closest('.setting-card');
+        const amountCard = amountInput.closest('.setting-card');
+        
+        if (formatSelect.value === 'auto') {
+            daysInput.disabled = true;
+            amountInput.disabled = true;
+            daysCard.classList.add('disabled');
+            amountCard.classList.add('disabled');
+        } else {
+            daysInput.disabled = false;
+            amountInput.disabled = false;
+            daysCard.classList.remove('disabled');
+            amountCard.classList.remove('disabled');
+            
+            if (formatSelect.value === 'paypal') {
+                daysInput.value = '7';
+                amountInput.value = '0.00';
+            } else if (formatSelect.value === 'amazon') {
+                daysInput.value = '3';
+                amountInput.value = '1.00';
+            }
         }
-    });
+    }
+
+    formatSelect.addEventListener('change', updateGhostedStates);
+    // Trigger on load to set initial state
+    updateGhostedStates();
 
     // Submit form and request backend processing
     uploadForm.addEventListener('submit', async (e) => {
@@ -618,6 +657,7 @@
         formData.append('execute', !document.getElementById('dryRunToggle').checked);
         formData.append('force', document.getElementById('forceToggle').checked);
         formData.append('days', document.getElementById('daysInput').value);
+        formData.append('amount_tolerance', document.getElementById('amountToleranceInput').value);
         formData.append('format', formatSelect.value);
 
         try {

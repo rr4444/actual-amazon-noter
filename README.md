@@ -31,6 +31,12 @@ E-commerce bank clearing times vary by payment mechanism:
 
 The tool automatically shifts its matching date tolerance to 7 days when the PayPal format is selected or detected.
 
+### Comparative Amount Tolerance & Payee Verification
+Different e-commerce platforms necessitate distinct matching strictness:
+- **Amazon (Default: £1.00 / 100 cents)**: Amazon orders are often split dynamically into multiple sub-shipments (which clear the bank as separate, minor charge adjustments) or include additional local taxes/shipping charges. A higher amount tolerance of up to £1.00 allows matching these split charges with the parent order.
+- **PayPal (Default: £0.00 / 0 cents)**: PayPal operates on exact passthrough bank settlement amounts. Because bank statement debits align exactly with the PayPal ledger transaction, any amount variance represents a distinct transaction. The tool enforces a strict **£0.00 amount tolerance** for PayPal matches, completely eliminating false-positive subscription mappings.
+- **Payee String Validation**: For PayPal transactions, the tool extracts alphanumeric keywords from the budget transaction payee and correlates them against the PayPal CSV's merchant Name (ignoring generic words like *PayPal*, *payment*, *ltd*). Specific merchant codes (e.g. `ROBLOX` vs `LEBARA`) are strictly segregated, preventing cross-matching (swapping) of near-identical small amounts on close dates.
+
 ---
 
 ## Configuration
@@ -104,6 +110,7 @@ Append custom tags (e.g., `#invoice` or `#follow-up`) to matched transactions:
 --dry-run [csv|json]    Show changes without updating (default: csv)
 --execute               Actually update records in Actual Budget
 --days X                Number of days tolerance for matching
+--amount-tolerance X    Max amount tolerance in currency units (e.g. 1.00 or 0.00)
 --format amazon|paypal  Explicitly set the CSV schema format
 --force                 Replace existing e-commerce tags
 --actual-http-api URL   API server URL

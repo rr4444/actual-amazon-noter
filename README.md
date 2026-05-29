@@ -2,6 +2,9 @@
 
 A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports.
 
+> [!IMPORTANT]
+> **🤖 Automated AI Classification Integration**: This uploader features first-class integration with the [rr4444/actual-ai](https://github.com/rr4444/actual-ai) transaction classifier. The companion dashboard includes a built-in **AI Assistant** panel allowing you to check connectivity status, trigger classification sweeps manually on-demand, or toggle **automated post-noter cascades** immediately following successful CSV uploads.
+
 > [!NOTE]
 > This project is a completely independent, production-grade fork of the wonderful [actual-amazon-noter](https://github.com/rmsppu/actual-amazon-noter) by [rmsppu](https://github.com/rmsppu), based on upstream commit [95b0f42](https://github.com/rmsppu/actual-amazon-noter/commit/95b0f42). We thank `rmsppu` for their exceptional foundation!
 

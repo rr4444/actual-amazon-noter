@@ -465,7 +465,7 @@
                         <div class="setting-title">Date Tolerance</div>
                         <div class="setting-desc">Max days the budget transaction date can occur after the order date.</div>
                     </div>
-                    <input type="number" id="daysInput" class="number-input" value="3" min="0" max="30">
+                    <input type="text" id="daysInput" class="number-input" value="Default" disabled>
                 </div>
 
                 <div class="setting-card">
@@ -473,7 +473,7 @@
                         <div class="setting-title">Amount Tolerance</div>
                         <div class="setting-desc">Max absolute amount mismatch in currency units (e.g. 1.00 for Amazon, 0.00 for PayPal).</div>
                     </div>
-                    <input type="number" id="amountToleranceInput" class="number-input" value="1.00" min="0" max="100" step="0.01">
+                    <input type="text" id="amountToleranceInput" class="number-input" value="Default" disabled>
                 </div>
             </div>
 
@@ -511,7 +511,7 @@
         </div>
     </main>
     <footer style="text-align: center; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); opacity: 0.8; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;">
-        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-ecommerce-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">rr4444 Fork{% if commit_hash and commit_hash != 'unknown' %} ({{ commit_hash }}){% endif %}</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
+        <p>Built for <a href="https://actualbudget.org" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Actual Budget</a> &bull; <a href="https://github.com/rr4444/actual-ecommerce-noter" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">actual-ecommerce-noter{% if commit_hash and commit_hash != 'unknown' %} ({{ commit_hash }}){% endif %}</a> &bull; <a id="diagnosticsLink" href="diagnostics" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">Raw Diagnostics</a></p>
     </footer>
 </div>
 
@@ -613,13 +613,23 @@
         const amountCard = amountInput.closest('.setting-card');
         
         if (formatSelect.value === 'auto') {
+            daysInput.type = 'text';
+            daysInput.value = 'Default';
             daysInput.disabled = true;
+            
+            amountInput.type = 'text';
+            amountInput.value = 'Default';
             amountInput.disabled = true;
+            
             daysCard.classList.add('disabled');
             amountCard.classList.add('disabled');
         } else {
+            daysInput.type = 'number';
             daysInput.disabled = false;
+            
+            amountInput.type = 'number';
             amountInput.disabled = false;
+            
             daysCard.classList.remove('disabled');
             amountCard.classList.remove('disabled');
             

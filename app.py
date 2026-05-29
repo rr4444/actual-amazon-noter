@@ -82,15 +82,9 @@ def process():
 
     execute = request.form.get('execute') == 'true'
     force = request.form.get('force') == 'true'
-    days = request.form.get('days', '3')
+    days = request.form.get('days', '')
     amount_tolerance = request.form.get('amount_tolerance', '')
     fmt = request.form.get('format', 'auto')
-
-    # Validate days is an integer
-    try:
-        days_int = int(days)
-    except ValueError:
-        days_int = 3
 
     # Save to a temporary file
     temp_dir = tempfile.gettempdir()
@@ -111,8 +105,14 @@ def process():
         if force:
             cmd.append('--force')
             
-        cmd.extend(['--days', str(days_int)])
-        if amount_tolerance:
+        if days and days != "Default":
+            try:
+                days_int = int(days)
+                cmd.extend(['--days', str(days_int)])
+            except ValueError:
+                pass
+                
+        if amount_tolerance and amount_tolerance != "Default":
             try:
                 amt_float = float(amount_tolerance)
                 cmd.extend(['--amount-tolerance', f"{amt_float:.2f}"])

@@ -4,6 +4,8 @@ import tempfile
 import uuid
 import threading
 import time
+import sys
+import traceback
 from flask import Flask, request, render_template, jsonify
 
 # Safe import of kubernetes python client
@@ -144,6 +146,14 @@ def process():
         stderr = result.stderr
         success = result.returncode == 0
 
+        # Forward subprocess output to container logs for real-time observability
+        if stdout:
+            print("--- NOTER STDOUT ---", flush=True)
+            print(stdout, flush=True)
+        if stderr:
+            print("--- NOTER STDERR ---", file=sys.stderr, flush=True)
+            print(stderr, file=sys.stderr, flush=True)
+
         # Clean output a bit (e.g. remove full temporary path references)
         stdout = stdout.replace(temp_path, 'uploaded_orders.csv')
         stderr = stderr.replace(temp_path, 'uploaded_orders.csv')
@@ -156,6 +166,9 @@ def process():
         })
 
     except Exception as e:
+        print(f"ERROR: Execution failed: {str(e)}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
         return jsonify({'error': f'Execution failed: {str(e)}'}), 500
     finally:
         # Ensure temporary file cleanup
@@ -446,6 +459,21 @@ def ai_logs(job_id):
             })
         else:
             return jsonify({"error": "Job ID not found"}), 404
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # Print unhandled exceptions to container logs for real-time observability
+    print("--- UNHANDLED EXCEPTION ---", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+    sys.stderr.flush()
+    
+    # Return JSON to prevent HTML error pages breaking JSON.parse on the frontend
+    response = jsonify({
+        "success": False,
+        "error": str(e),
+        "traceback": traceback.format_exc()
+    })
+    return response, 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

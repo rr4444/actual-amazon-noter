@@ -1,7 +1,17 @@
 import os
 import subprocess
 import tempfile
+import uuid
+import threading
+import time
 from flask import Flask, request, render_template, jsonify
+
+# Safe import of kubernetes python client
+try:
+    from kubernetes import client, config
+    HAS_K8S_SDK = True
+except ImportError:
+    HAS_K8S_SDK = False
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
@@ -151,6 +161,242 @@ def process():
         # Ensure temporary file cleanup
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+# --- AI Assistant Integration Endpoints ---
+
+active_jobs = {}  # for local mode mock execution
+
+def run_local_mock_job(job_id):
+    active_jobs[job_id] = {
+        "status": "running",
+        "logs": [
+            "[Initial Test] local actual-ai-fork mock runner active.",
+            f"[Local Adapter] Spawning {job_id}...",
+            "[Log Streamer] actual-ai has booted. Fetching live output:",
+            "----------------------------------------------------------",
+            "Loaded configuration settings...",
+            "Connecting to Actual Budget at http://actual-server:5006...",
+            "Gemini Model active: gemini-2.5-flash-lite",
+            "Scanning transactions..."
+        ]
+    }
+    
+    stages = [
+        "Matched 8 recurring utility payments...",
+        "Matched 5 grocery store annotations...",
+        "AI classification score threshold: 0.85",
+        "Updating category mappings in Actual server...",
+        "Success! Categorized 13 uncategorized transactions.",
+        "Job completed successfully."
+    ]
+    
+    for stage in stages:
+        time.sleep(1.5)
+        active_jobs[job_id]["logs"].append(stage)
+        
+    active_jobs[job_id]["status"] = "success"
+
+@app.route('/ai/status')
+def ai_status():
+    namespace = os.environ.get('ACTUAL_AI_NAMESPACE', 'finance')
+    cronjob_name = os.environ.get('ACTUAL_AI_CRONJOB_NAME', 'actual-ai')
+    
+    in_k8s = os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount')
+    
+    if in_k8s:
+        if not HAS_K8S_SDK:
+            return jsonify({
+                "status": "AI Status: Initial Integration Checked (Kubernetes Mode - Missing SDK)",
+                "enabled": False,
+                "mode": "Kubernetes",
+                "error": "kubernetes python client SDK not installed"
+            })
+        try:
+            config.load_incluster_config()
+            batch_v1 = client.BatchV1Api()
+            # Read CronJob
+            cj = batch_v1.read_namespaced_cron_job(cronjob_name, namespace)
+            return jsonify({
+                "status": "AI Status: Initial Integration Checked (Kubernetes Mode)",
+                "enabled": True,
+                "mode": "Kubernetes",
+                "cronjob": cronjob_name,
+                "namespace": namespace
+            })
+        except Exception as e:
+            return jsonify({
+                "status": "AI Status: Initial Integration Missing (Dormant)",
+                "enabled": False,
+                "mode": "Kubernetes",
+                "error": str(e)
+            })
+    else:
+        # Local Mode check
+        local_dir_exists = os.path.exists('../actual-ai-fork')
+        has_docker = False
+        try:
+            subprocess.run(['docker', '--version'], capture_output=True, text=True)
+            has_docker = True
+        except Exception:
+            pass
+            
+        if local_dir_exists or has_docker:
+            return jsonify({
+                "status": "AI Status: Initial Integration Checked (Local Mode)",
+                "enabled": True,
+                "mode": "Local",
+                "cronjob": cronjob_name,
+                "namespace": namespace
+            })
+        else:
+            return jsonify({
+                "status": "AI Status: Initial Integration Missing (Dormant)",
+                "enabled": False,
+                "mode": "Local",
+                "error": "No local actual-ai-fork directory or docker command found"
+            })
+
+@app.route('/ai/classify', methods=['POST'])
+def ai_classify():
+    namespace = os.environ.get('ACTUAL_AI_NAMESPACE', 'finance')
+    cronjob_name = os.environ.get('ACTUAL_AI_CRONJOB_NAME', 'actual-ai')
+    
+    in_k8s = os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount')
+    
+    if in_k8s:
+        if not HAS_K8S_SDK:
+            return jsonify({"error": "kubernetes library not available"}), 500
+        try:
+            config.load_incluster_config()
+            batch_v1 = client.BatchV1Api()
+            
+            # Fetch existing CronJob
+            cj = batch_v1.read_namespaced_cron_job(cronjob_name, namespace)
+            
+            # Extract pod spec template from CronJob
+            pod_template = cj.spec.job_template.spec.template
+            
+            # Generate unique job name
+            unique_suffix = uuid.uuid4().hex[:6]
+            job_name = f"{cronjob_name}-manual-{unique_suffix}"
+            
+            # Construct ownerReference linking Job back to parent CronJob
+            owner_reference = client.V1OwnerReference(
+                api_version=cj.api_version or "batch/v1",
+                block_owner_deletion=True,
+                controller=True,
+                kind=cj.kind or "CronJob",
+                name=cj.metadata.name,
+                uid=cj.metadata.uid
+            )
+            
+            # Create Job resource manifest
+            job_manifest = client.V1Job(
+                api_version="batch/v1",
+                kind="Job",
+                metadata=client.V1ObjectMeta(
+                    name=job_name,
+                    namespace=namespace,
+                    owner_references=[owner_reference],
+                    labels={
+                        "app.kubernetes.io/managed-by": "actual-ecommerce-noter",
+                        "cronjob-name": cronjob_name
+                    }
+                ),
+                spec=client.V1JobSpec(
+                    template=pod_template,
+                    backoff_limit=0
+                )
+            )
+            
+            # Submit to K8s
+            batch_v1.create_namespaced_job(namespace, job_manifest)
+            
+            return jsonify({
+                "success": True,
+                "job_id": job_name,
+                "mode": "Kubernetes"
+            })
+            
+        except Exception as e:
+            return jsonify({"error": f"Failed to spawn K8s job: {str(e)}"}), 500
+    else:
+        # Spawn mock local job
+        job_id = f"{cronjob_name}-manual-{uuid.uuid4().hex[:6]}"
+        thread = threading.Thread(target=run_local_mock_job, args=(job_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "mode": "Local"
+        })
+
+@app.route('/ai/logs/<job_id>')
+def ai_logs(job_id):
+    namespace = os.environ.get('ACTUAL_AI_NAMESPACE', 'finance')
+    in_k8s = os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount')
+    
+    if in_k8s:
+        if not HAS_K8S_SDK:
+            return jsonify({"error": "kubernetes library not available"}), 500
+        try:
+            config.load_incluster_config()
+            core_v1 = client.CoreV1Api()
+            
+            # Find the pod associated with this job
+            pods = core_v1.list_namespaced_pod(
+                namespace,
+                label_selector=f"job-name={job_id}"
+            )
+            
+            if not pods.items:
+                return jsonify({
+                    "status": "pending",
+                    "logs": f"Job {job_id} has been queued. Waiting for Pod creation..."
+                })
+                
+            pod = pods.items[0]
+            pod_name = pod.metadata.name
+            phase = pod.status.phase
+            
+            if phase == "Pending":
+                return jsonify({
+                    "status": "pending",
+                    "logs": f"Pod {pod_name} is starting up (Phase: Pending)..."
+                })
+            
+            # Fetch logs
+            try:
+                logs_text = core_v1.read_namespaced_pod_log(pod_name, namespace)
+            except Exception as e:
+                logs_text = f"Could not retrieve pod logs: {str(e)}"
+                
+            status_map = {
+                "Running": "running",
+                "Succeeded": "success",
+                "Failed": "failed"
+            }
+            status = status_map.get(phase, "running")
+            
+            return jsonify({
+                "status": status,
+                "logs": logs_text
+            })
+            
+        except Exception as e:
+            return jsonify({"error": f"Failed to retrieve K8s logs: {str(e)}"}), 500
+    else:
+        # Local mock retrieval
+        if job_id in active_jobs:
+            job_info = active_jobs[job_id]
+            return jsonify({
+                "status": job_info["status"],
+                "logs": "\n".join(job_info["logs"])
+            })
+        else:
+            return jsonify({"error": "Job ID not found"}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

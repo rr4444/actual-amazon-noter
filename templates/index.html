@@ -474,6 +474,58 @@
                         <div class="setting-desc">Max absolute amount mismatch in currency units (e.g. 1.00 for Amazon, 0.00 for PayPal).</div>
                     </div>
                     <input type="text" id="amountToleranceInput" class="number-input" value="Default" disabled>
+            </div>
+
+            <!-- AI Assistant Integration Card -->
+            <div class="setting-card" id="aiAssistantCard" style="grid-column: 1 / -1; background: rgba(147, 51, 234, 0.04); border: 1px solid rgba(147, 51, 234, 0.12); margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; width: 100%;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span style="font-size: 1.2rem;">🤖</span>
+                            <div class="setting-title" style="font-size: 1.1rem; margin-bottom: 0; background: linear-gradient(135deg, #a78bfa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI Assistant Integration</div>
+                        </div>
+                        <div class="setting-desc" id="aiStatusText" style="font-size: 0.9rem; margin-bottom: 0.5rem; font-family: 'JetBrains Mono', monospace;">
+                            AI Status: Checking integration...
+                        </div>
+                        <div class="setting-desc" style="margin-bottom: 0.75rem;">
+                            Trigger the Gemini-powered transaction classifier on-demand, or configure it to run automatically after uploading.
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                            <button type="button" class="btn" id="runAiBtn" style="width: auto; padding: 0.6rem 1.25rem; font-size: 0.9rem; border-radius: 8px; background: linear-gradient(135deg, #9333ea, #3b82f6); margin-top: 0.5rem; box-shadow: 0 4px 10px rgba(147, 51, 234, 0.2);" disabled>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <div class="btn-spinner" id="aiBtnSpinner" style="width: 14px; height: 14px; border-width: 2px;"></div>
+                                    <span id="aiBtnText">Run AI Classifier</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; padding-top: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <label class="switch">
+                                <input type="checkbox" id="autoTriggerToggle">
+                                <span class="slider"></span>
+                            </label>
+                            <div>
+                                <div class="setting-title" style="font-size: 0.9rem; margin-bottom: 0.1rem;">Post-Process Auto-Trigger</div>
+                                <div class="setting-desc" style="font-size: 0.75rem; margin-bottom: 0; max-width: 200px;">Auto-run AI classification on successful CSV uploads.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI Logs Terminal inside the card, collapsible -->
+                <div class="terminal" id="aiTerminal" style="margin-top: 1.5rem; display: none; width: 100%;">
+                    <div class="terminal-header">
+                        <div class="terminal-title">
+                            <div class="terminal-dot running" id="aiTerminalDot"></div>
+                            <span>AI Classification Log Output</span>
+                        </div>
+                    </div>
+                    <div class="terminal-body" style="max-height: 250px; background: #040507;">
+                        <pre id="aiLogContent" style="color: #a7f3d0;"></pre>
+                    </div>
                 </div>
             </div>
 
@@ -647,6 +699,128 @@
     // Trigger on load to set initial state
     updateGhostedStates();
 
+    // AI Integration DOM Elements
+    const aiStatusText = document.getElementById('aiStatusText');
+    const runAiBtn = document.getElementById('runAiBtn');
+    const aiBtnSpinner = document.getElementById('aiBtnSpinner');
+    const aiBtnText = document.getElementById('aiBtnText');
+    const autoTriggerToggle = document.getElementById('autoTriggerToggle');
+    const aiTerminal = document.getElementById('aiTerminal');
+    const aiLogContent = document.getElementById('aiLogContent');
+    const aiTerminalDot = document.getElementById('aiTerminalDot');
+
+    // Auto-trigger toggle storage
+    const storedAutoTrigger = localStorage.getItem('autoTriggerAi');
+    if (storedAutoTrigger !== null) {
+        autoTriggerToggle.checked = storedAutoTrigger === 'true';
+    } else {
+        autoTriggerToggle.checked = false; // default
+    }
+    
+    autoTriggerToggle.addEventListener('change', () => {
+        localStorage.setItem('autoTriggerAi', autoTriggerToggle.checked);
+    });
+
+    // Check AI Status
+    async function checkAiStatus() {
+        try {
+            const response = await fetch(basePath + 'ai/status');
+            const data = await response.json();
+            if (data.enabled) {
+                aiStatusText.textContent = `AI Status: Initial Integration Checked (${data.mode} Mode)`;
+                aiStatusText.style.color = 'var(--success)';
+                runAiBtn.disabled = false;
+            } else {
+                aiStatusText.textContent = `AI Status: Initial Integration Missing (Dormant)`;
+                aiStatusText.style.color = 'var(--danger)';
+                runAiBtn.disabled = true;
+                if (data.error) {
+                    console.warn("AI integration dormant:", data.error);
+                }
+            }
+        } catch (error) {
+            aiStatusText.textContent = `AI Status: Initial Integration Missing (Dormant)`;
+            aiStatusText.style.color = 'var(--danger)';
+            runAiBtn.disabled = true;
+            console.error("Failed to check AI status:", error);
+        }
+    }
+
+    // Trigger AI Classification
+    async function triggerAiClassification(auto = false) {
+        runAiBtn.disabled = true;
+        aiBtnSpinner.style.display = 'block';
+        aiBtnText.textContent = auto ? 'Auto-running AI...' : 'Running...';
+        
+        aiTerminal.style.display = 'block';
+        aiLogContent.textContent = auto ? 'Post-Noter Auto-Trigger active.\nConnecting to AI agent and spawning task...\n' : 'Initializing classification request...\n';
+        aiTerminalDot.className = 'terminal-dot running';
+        aiTerminal.scrollIntoView({ behavior: 'smooth' });
+
+        try {
+            const response = await fetch(basePath + 'ai/classify', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success && data.job_id) {
+                aiLogContent.textContent += `Successfully spawned classification ${data.mode} Job: ${data.job_id}\nStreaming logs...\n----------------------------------------------------------\n`;
+                pollAiLogs(data.job_id);
+            } else {
+                aiLogContent.textContent += `Error triggering classification: ${data.error || 'Unknown error'}\n`;
+                aiTerminalDot.className = 'terminal-dot';
+                resetAiBtn();
+            }
+        } catch (error) {
+            aiLogContent.textContent += `Failed to connect to trigger API: ${error.message}\n`;
+            aiTerminalDot.className = 'terminal-dot';
+            resetAiBtn();
+        }
+    }
+
+    function resetAiBtn() {
+        runAiBtn.disabled = false;
+        aiBtnSpinner.style.display = 'none';
+        aiBtnText.textContent = 'Run AI Classifier';
+    }
+
+    function pollAiLogs(jobId) {
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(basePath + 'ai/logs/' + jobId);
+                if (!response.ok) {
+                    throw new Error(`HTTP status ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (data.logs) {
+                    aiLogContent.innerHTML = colorizeLogs(data.logs);
+                    aiTerminal.querySelector('.terminal-body').scrollTop = aiTerminal.querySelector('.terminal-body').scrollHeight;
+                }
+                
+                if (data.status === 'success') {
+                    clearInterval(interval);
+                    aiTerminalDot.className = 'terminal-dot success';
+                    resetAiBtn();
+                } else if (data.status === 'failed') {
+                    clearInterval(interval);
+                    aiTerminalDot.className = 'terminal-dot';
+                    resetAiBtn();
+                }
+            } catch (error) {
+                clearInterval(interval);
+                aiLogContent.innerHTML += `\n<span class="log-error">Error fetching logs: ${error.message}</span>`;
+                aiTerminalDot.className = 'terminal-dot';
+                resetAiBtn();
+            }
+        }, 1500);
+    }
+
+    runAiBtn.addEventListener('click', () => {
+        triggerAiClassification(false);
+    });
+
+    // Run AI check on load
+    checkAiStatus();
+
     // Submit form and request backend processing
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -685,6 +859,14 @@
                 
                 logContent.innerHTML = colorizeLogs(out || 'Execution completed with no output logs.');
                 terminalDot.className = 'terminal-dot success';
+
+                // Post-Process Auto-Trigger Cascade (only on execution runs, or dry-run successful too)
+                // Let's run whenever Noter reports success, the autoTrigger is checked, and AI integration is active!
+                if (data.success && autoTriggerToggle.checked && !runAiBtn.disabled) {
+                    setTimeout(() => {
+                        triggerAiClassification(true);
+                    }, 1000);
+                }
             } else {
                 logContent.innerHTML = `<span class="log-error">Error: ${data.error || 'Server error occurred'}</span>`;
                 terminalDot.className = 'terminal-dot';

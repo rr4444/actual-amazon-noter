@@ -68,11 +68,12 @@ Different e-commerce platforms necessitate distinct matching strictness:
 
 ## Configuration
 
-The utility requires connection parameters for your `actual-http-api` instance:
+The utility requires connection parameters for your `actual-http-api` instance and supports multi-currency configurations:
 
 1. **API URL** (`ACTUAL_HTTP_API_URL`): The URL of your actual-http-api server (e.g., `http://localhost:5007`).
 2. **API Key** (`ACTUAL_HTTP_API_KEY`): The secret key used by actual-http-api.
 3. **Sync ID** (`ACTUAL_SYNCID`): The synchronization ID for your specific budget.
+4. **Base Currency** (`ACTUAL_BASE_CURRENCY`): (Optional) The base settlement currency of your budget/bank statements (e.g. `USD`, `GBP`). Defaults directly to `GBP`. Used to correlate foreign purchases to your base ledger balance during PayPal general currency conversions.
 
 ### Providing Configuration
 
@@ -83,6 +84,7 @@ These parameters can be provided via environment variables, CLI flags, or file-b
 export ACTUAL_HTTP_API_URL=http://localhost:5007
 export ACTUAL_HTTP_API_KEY=your-secret-key
 export ACTUAL_SYNCID=your-sync-id
+export ACTUAL_BASE_CURRENCY=GBP
 ```
 
 #### Option 2: Command-Line Arguments
@@ -91,6 +93,7 @@ actual-ecommerce-noter \
     --actual-http-api http://localhost:5007 \
     --actual-http-api-key your-secret-key \
     --actual-syncid your-sync-id \
+    --base-currency GBP \
     Order_History.csv
 ```
 
@@ -99,6 +102,7 @@ actual-ecommerce-noter \
 ACTUAL_HTTP_API_URL=http://localhost:5007
 ACTUAL_HTTP_API_KEY=your-secret-key
 ACTUAL_SYNCID=your-sync-id
+ACTUAL_BASE_CURRENCY=GBP
 ```
 ```bash
 actual-ecommerce-noter --actual-http-api-file config.txt Order_History.csv

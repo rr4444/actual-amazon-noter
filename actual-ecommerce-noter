@@ -44,6 +44,7 @@ PAYPAL_ITEM_TITLE_TAG = "#PayPal-Item-Title"
 
 # Default configuration
 DEFAULT_DAYS_TOLERANCE = 3
+DEFAULT_BASE_CURRENCY = os.environ.get("ACTUAL_BASE_CURRENCY", "GBP")
 
 # Required environment variable names
 ENV_ACTUAL_HTTP_API_URL = "ACTUAL_HTTP_API_URL"
@@ -70,7 +71,7 @@ class AmazonOrder:
             self.order_id = record.order_id
             self.date = record.date
             self.shipping_address = record.shipping_address
-            self.currency = getattr(record, "currency", "GBP")
+            self.currency = getattr(record, "currency", DEFAULT_BASE_CURRENCY)
         
         self.amount += record.amount
         if record.product_name:
@@ -114,7 +115,7 @@ class AmazonRecord:
     def __init__(self, record_type: str, data: dict):
         self.record_type = record_type
         self.data = data
-        self.currency = data.get("Currency", "GBP")
+        self.currency = data.get("Currency", DEFAULT_BASE_CURRENCY)
         
         # Extract relevant fields based on record type
         if record_type == "Order_History":
@@ -206,7 +207,7 @@ class PaypalRecord:
         self.name = data.get("Name", "")
         self.type = data.get("Type", "")
         self.status = data.get("Status", "")
-        self.currency = data.get("Currency", "GBP")
+        self.currency = data.get("Currency", DEFAULT_BASE_CURRENCY)
         self.amount_raw = data.get("Amount", "0.00")
         self.receipt_id = data.get("Receipt ID", "")
         self.transaction_id = data.get("Transaction ID", "")
@@ -446,7 +447,7 @@ def read_amazon_csv(file_path: str) -> tuple:
     return record_type, orders
 
 
-def read_paypal_csv(file_path: str) -> tuple:
+def read_paypal_csv(file_path: str, base_currency: str = DEFAULT_BASE_CURRENCY) -> tuple:
     """Read a PayPal CSV file and filter deposit buffer rows and conversion conversion mappings."""
     all_rows = []
     with open(file_path, "r", encoding="utf-8-sig") as f:
@@ -467,21 +468,21 @@ def read_paypal_csv(file_path: str) -> tuple:
             continue
             
         # Foreign Currency Conversion handling:
-        # If the currency is not GBP (our base), we find the corresponding General Currency Conversion row in GBP
+        # If the currency is not our base currency, we find the corresponding General Currency Conversion row in base currency
         # occurring at the exact same Date and Time.
-        if record.currency != "GBP":
+        if record.currency != base_currency:
             conversion_amount = None
             for conv in records:
                 if (conv.type.strip() == "General Currency Conversion" and
                     conv.date_str == record.date_str and
                     conv.time_str == record.time_str and
-                    conv.currency == "GBP" and
+                    conv.currency == base_currency and
                     conv.amount < 0):
                     conversion_amount = conv.amount
                     break
             if conversion_amount is not None:
                 record.amount = conversion_amount
-                record.currency = "GBP"
+                record.currency = base_currency
                 
         order = PaypalOrder(record)
         valid_orders.append(order)
@@ -678,7 +679,7 @@ def print_dry_run_csv(transaction: dict, record: Any, original_notes: str, new_n
     print(f"  Order ID: {record.order_id}")
     print(f"  Date: {record.date.strftime('%m-%d-%Y') if record.date else 'N/A'}")
     if hasattr(record, 'product_names'):
-        ccy = getattr(record, 'currency', 'GBP')
+        ccy = getattr(record, 'currency', DEFAULT_BASE_CURRENCY)
         for i, (product, cost) in enumerate(zip(record.product_names, record.item_amounts)):
             print(f"  Product {i+1}: {product} ({ccy} {cost:.2f})")
     else:
@@ -756,6 +757,13 @@ Examples:
         help="Replace existing tags in notes field"
     )
     parser.add_argument(
+        "-c",
+        "--base-currency",
+        dest="base_currency",
+        default=DEFAULT_BASE_CURRENCY,
+        help=f"Base currency for matching and PayPal correlation conversions (default: {DEFAULT_BASE_CURRENCY})"
+    )
+    parser.add_argument(
         "-t",
         "--tag",
         dest="user_tags",
@@ -830,7 +838,7 @@ Examples:
                     file_format = "amazon"
                     
         if file_format == "paypal":
-            record_type, records = read_paypal_csv(csv_file)
+            record_type, records = read_paypal_csv(csv_file, base_currency=args.base_currency)
             all_records.extend(records)
             print(f"Loaded {len(records)} records from {csv_file} (PayPal)")
             detected_format = "paypal"
@@ -940,7 +948,7 @@ Examples:
                     sub_sum = sum(s["amount"] for s in splits_preview)
                     if sub_sum != parent_amount:
                         splits_preview[-1]["amount"] += (parent_amount - sub_sum)
-                    ccy = getattr(record, 'currency', 'GBP')
+                    ccy = getattr(record, 'currency', DEFAULT_BASE_CURRENCY)
                     print(f"  SPLIT: Would create {len(splits_preview)} sub-transactions:")
                     for idx, sp in enumerate(splits_preview):
                         print(f"    Sub {idx+1}: {ccy} {abs(sp['amount'])/100:.2f} \u2014 {sp['notes'][:80]}")

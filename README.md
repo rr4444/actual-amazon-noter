@@ -1,6 +1,6 @@
 # actual-ecommerce-noter
 
-A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports.
+A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports, natively integrated with [rr4444/actual-ai](https://github.com/rr4444/actual-ai) for advanced LLM-powered transaction classification.
 
 > [!NOTE]
 > This project is a completely independent, production-grade fork of the wonderful [actual-amazon-noter](https://github.com/rmsppu/actual-amazon-noter) by [rmsppu](https://github.com/rmsppu), based on upstream commit [95b0f42](https://github.com/rmsppu/actual-amazon-noter/commit/95b0f42). We thank `rmsppu` for their exceptional foundation!
@@ -212,7 +212,8 @@ Access the interface at `http://localhost:8080`.
 
 ## Kubernetes Deployment Examples
 
-To deploy the web companion persistently in a Kubernetes (or K3s) cluster, follow these steps.
+> [!IMPORTANT]
+> **Illustrative Examples Only**: The following configurations and manifests are provided purely as educational templates and conceptual examples. They are not direct, exact steps to follow for production installations, and should be customized to fit your specific cluster network, namespaces, routing architecture, and secret management schemes.
 
 ### 1. Build and Import the Image
 Because this companion uses a customized local build, you must build the Docker image and make it available to your Kubernetes nodes before deploying:
@@ -253,8 +254,6 @@ spec:
     - match: Host(`actual.example.com`) && PathPrefix(`/actual-ecommerce-noter`)
       kind: Rule
       middlewares:
-        - name: actual-sync-auth              # HTTP Basic Auth middleware reference
-          namespace: finance
         - name: actual-ecommerce-noter-strip
           namespace: finance
       services:

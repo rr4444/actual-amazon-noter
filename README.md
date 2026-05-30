@@ -2,41 +2,47 @@
 
 A companion utility and web companion for [Actual Budget](https://actualbudget.org) that enriches transaction records with purchase details from Amazon and PayPal CSV exports.
 
-> [!IMPORTANT]
-> **🤖 Automated AI Classification Integration**: This uploader features first-class integration with the [rr4444/actual-ai](https://github.com/rr4444/actual-ai) transaction classifier. The companion dashboard includes a built-in **AI Assistant** panel allowing you to check connectivity status, trigger classification sweeps manually on-demand, or toggle **automated post-noter cascades** immediately following successful CSV uploads.
-
 > [!NOTE]
 > This project is a completely independent, production-grade fork of the wonderful [actual-amazon-noter](https://github.com/rmsppu/actual-amazon-noter) by [rmsppu](https://github.com/rmsppu), based on upstream commit [95b0f42](https://github.com/rmsppu/actual-amazon-noter/commit/95b0f42). We thank `rmsppu` for their exceptional foundation!
 
 ---
 
-## Fork Enhancements & Release Notes
+## Table of Contents
 
-### Amazon Split & Engine Baseline (v1.1.0)
-* **Expanded Payee Matching**: Dynamically searches `Amz` payees alongside `Amazon` to capture all `Amznmktplace` charges cleanly.
-* **Flexible Date Window**: Allowed a `-2` day date tolerance offset to handle timezone and same-day dispatch differences.
-* **CSV Schema Validation**: Fixed critical CSV header mismatch (`Shipment Address` -> `Shipping Address`).
-* **Multi-Currency Support**: Extracts the currency field directly from the CSV (defaulting to `GBP`) for high-fidelity notes and dry-run previews.
-* **Double-Booking Protection**: Fixed identical-amount duplication bugs via rigorous `used_amazon` set tracking.
-* **Automated Split Transactions**: Adds a powerful `split_transaction` API method to natively create parent-child splits for multi-item orders:
-  * **Idempotency**: Checks `is_parent` before splitting to allow safe duplicate runs, while supporting duplicate items in the same order.
-  * **Precision Rounding**: Performs fraction-of-cent rounding correction on the final sub-transaction to match parent amounts exactly.
-  * **UUID Inheritance**: Split sub-transactions inherit parent payee UUIDs.
-  * **Dry-Run Observability**: Outputs comprehensive split previews with formatted currency amounts and summary counts.
-
-### PayPal Integration & eCommerce Upgrade (v2.1.0)
-* **Unified eCommerce Dashboard**: Frame Amazon and PayPal as core examples of e-commerce noting.
-* **PayPal Integration**: Filters for `Completed` status, ignores internal funding buffers, and maps USD/EUR currency conversions to their GBP bank equivalents.
-* **Payee-Keyword Correlation**: Extracts and matches payee keywords to prevent cross-matching close amounts on adjacent dates (e.g. Roblox vs Lebara).
-* **Configurable Amount Tolerance**: Exposes amount tolerance on both the CLI (`--amount-tolerance`) and GUI card.
-* **Responsive ACTUAL Theme**: Modern, high-performance UI tailored specifically to Actual Budget's deep-navy and violet design colors.
+* [Key Features](#key-features)
+* [Design Decisions & Matching Logic](#design-decisions--matching-logic)
+  * [Why Noting instead of Ledger Imports?](#why-noting-instead-of-ledger-imports)
+  * [Why Standard PayPal CSV over QuickBooks IIF?](#why-standard-paypal-csv-over-quickbooks-iif)
+  * [Dynamic Date Tolerance](#dynamic-date-tolerance)
+  * [Comparative Amount Tolerance & Payee Verification](#comparative-amount-tolerance--payee-verification)
+* [🤖 actual-ai Integration (On-Demand & Auto-Trigger)](#-actual-ai-integration-on-demand--auto-trigger)
+  * [🌟 Key Features](#-key-features-1)
+  * [⚙️ Collision-Free Workflows](#-collision-free-workflows)
+  * [Logical Workflow Diagram](#logical-workflow-diagram)
+* [Configuration](#configuration)
+  * [Providing Configuration](#providing-configuration)
+* [CLI Usage](#cli-usage)
+  * [Basic Usage (Dry-Run Mode)](#basic-usage-dry-run-mode)
+  * [Execute Changes](#execute-changes)
+  * [Custom Date Tolerance & Format Override](#custom-date-tolerance--format-override)
+  * [Custom Tags](#custom-tags)
+  * [CLI Options Reference](#cli-options-reference)
+* [Web Interface](#web-interface)
+* [Kubernetes Deployment Examples](#kubernetes-deployment-examples)
+  * [1. Build and Import the Image](#1-build-and-import-the-image)
+  * [2. Deployment Manifests](#2-deployment-manifests)
+* [Fork Enhancements & Release Notes](#fork-enhancements--release-notes)
+  * [Amazon Split & Engine Baseline (v1.1.0)](#amazon-split--engine-baseline-v110)
+  * [PayPal Integration & eCommerce Upgrade (v2.1.0)](#paypal-integration--ecommerce-upgrade-v210)
+* [License](#license)
 
 ---
 
 ## Key Features
 
-- **Structural Split Transactions**: Converts multi-item orders into parent-child split transactions in your Actual Budget UI, pre-populated with exact item prices and individual notes.
-- **PayPal UK Correlation**: Filters for `Completed` status, ignores internal card deposit buffers, and automatically matches EUR/USD foreign currency purchases to their GBP equivalents by correlating adjacent General Currency Conversion entries.
+- **Structural Split Transactions**: Converts multi-item Amazon orders into parent-child split transactions in your Actual Budget UI, pre-populated with exact item prices and individual notes.
+- **PayPal Currency Correlation**: Filters for `Completed` status, ignores internal card deposit buffers, and automatically matches EUR/USD foreign currency purchases to their GBP equivalents by correlating adjacent General Currency Conversion entries (tested extensively on PayPal UK data).
+- **First-Class `rr4444/actual-ai` Integration**: Features premium, built-in integration with the [rr4444/actual-ai](https://github.com/rr4444/actual-ai) transaction classifier. The web companion dashboard includes a dedicated **AI Assistant** panel allowing you to monitor connectivity status, trigger classification sweeps manually on-demand, or toggle **automated post-noter cascades** immediately following successful CSV uploads.
 - **Smart Explicit Format Selection**: Provides explicit dropdown selection in the GUI and a `--format amazon|paypal|auto` flag in the CLI to avoid header schema ambiguities.
 - **Integrated Web Interface**: Features an interactive dashboard with a drag-and-drop CSV uploader, execution controls, dry-run simulation, real-time colorized logs, and raw connection diagnostics.
 - **Multi-Currency Support**: Dynamically extracts currency details from the source CSV to ensure dry-run previews and split notes are accurately localized.
@@ -49,7 +55,7 @@ A companion utility and web companion for [Actual Budget](https://actualbudget.o
 Ledger imports of e-commerce statements often result in transaction duplication and bypass native bank account feeds. By choosing **Noting**, the tool matches and enriches already imported bank or credit card transactions, preserving the correct, cleared exchange rates and bank statement records.
 
 ### Why Standard PayPal CSV over QuickBooks IIF?
-While the QuickBooks IIF format offers consistent item descriptions, it strips PayPal's unique Transaction and Receipt IDs. Without these hashes, matching is vulnerable to duplicate annotations when multiple transactions of identical amounts occur on the same day. Using the **Standard CSV** allows the tool to generate precise tags anchored by the `#PayPal-Transaction-ID <ID>` hash, ensuring duplicate protection and safety.
+While the QuickBooks IIF format offers consistent item descriptions, it strips PayPal's unique Transaction and Receipt IDs. Without these hashes, matching is vulnerable to duplicate annotations when multiple transactions of identical amounts occur on the same day. Using the **Standard CSV** allows the tool to generate precise tags anchored by the `#PayPal-Transaction-ID <ID>` hash, ensuring duplicate protection and safety (tested extensively on PayPal UK data).
 
 ### Dynamic Date Tolerance
 E-commerce bank clearing times vary by payment mechanism:
@@ -63,6 +69,46 @@ Different e-commerce platforms necessitate distinct matching strictness:
 - **Amazon (Default: £1.00 / 100 cents)**: Amazon orders are often split dynamically into multiple sub-shipments (which clear the bank as separate, minor charge adjustments) or include additional local taxes/shipping charges. A higher amount tolerance of up to £1.00 allows matching these split charges with the parent order.
 - **PayPal (Default: £0.00 / 0 cents)**: PayPal operates on exact passthrough bank settlement amounts. Because bank statement debits align exactly with the PayPal ledger transaction, any amount variance represents a distinct transaction. The tool enforces a strict **£0.00 amount tolerance** for PayPal matches, completely eliminating false-positive subscription mappings.
 - **Payee String Validation**: For PayPal transactions, the tool extracts alphanumeric keywords from the budget transaction payee and correlates them against the PayPal CSV's merchant Name (ignoring generic words like *PayPal*, *payment*, *ltd*). Specific merchant codes (e.g. `ROBLOX` vs `LEBARA`) are strictly segregated, preventing cross-matching (swapping) of near-identical small amounts on close dates.
+
+---
+
+## 🤖 actual-ai Integration (On-Demand & Auto-Trigger)
+
+This companion uploader features a first-class, premium integration with [rr4444/actual-ai](https://github.com/rr4444/actual-ai) to categorize transactions automatically.
+
+> [!NOTE]
+> **Exclusive to the Web Interface**: This integration is accessible **only** when running the companion uploader via the Web GUI (`app.py`). 
+> 
+> * **Why?**: The core Python script (`actual-ecommerce-noter`) is kept strictly as a standalone, single-purpose matching and splitting CLI utility. Decoupling the AI integration into the Web GUI keeps the CLI lightweight and allows the web dashboard's HTTP orchestrator to handle the asynchronous task lifecycle, Kubernetes RBAC job spawning, and live streaming of container logs directly to your browser.
+
+### 🌟 Key Features
+- **AI Assistant Card**: Displays your active connectivity mode via an `"Initial Integration Test"` on page load (`AI Status: Initial Integration Checked (Kubernetes Mode|Local Mode)`).
+- **On-Demand Manual Classifier**: Run a classification pass at any time directly from the companion dashboard. Spawns an associated one-shot K8s Job linked natively to your existing parent `actual-ai` CronJob via `ownerReferences` (ensuring perfect Rancher/Lens resource grouping and clean garbage collection).
+- **Post-Process Auto-Trigger**: A slider switch (saved in `localStorage`) that automatically schedules a classification pass immediately after a successful CSV noter process!
+- **Asynchronous Progress Logs**: Polling logs dynamically with pod status awareness (`Pending` startup -> `Running` container stream -> `Success`/`Failed` completion).
+
+### ⚙️ Collision-Free Workflows
+To prevent double-classification and transaction collisions, add feature tags inside your `actual-ai` `FEATURES` array:
+- **`amazonNoterWorkflow`**: Tells `actual-ai` to ignore standard Amazon/AMZN transactions (as they are already split and split-itemized by `actual-ecommerce-noter`).
+- **`paypalNoterWorkflow`**: Tells `actual-ai` to ignore standard raw PayPal/PYPL transactions (as they are already auto-correlated, matched, and payee-verified by this companion uploader).
+- **High-Fidelity Prompt Simplification**: `actual-ai` automatically extracts and simplifies note tags generated by the uploader (such as `#Amazon-Product-Name`, `#PayPal-Item-Title`, and split index suffixes) into pure, clean merchant descriptions inside its prompt, ensuring the Gemini model classifies them with maximum category accuracy.
+
+#### **Logical Workflow Diagram**
+```
+           [Actual Budget Uncategorized Transaction]
+                              │
+                              ▼
+                (amazonNoterWorkflow ENABLED?)
+                 ┌────────────┴────────────┐
+                 │ YES                     │ NO
+                 ▼                         ▼
+         [Has Noter Notes?]         [AI CATEGORIZES]
+          ┌──────┴──────┐          (Standard AI Flow)
+       NO │             │ YES
+          ▼             ▼
+     [AI IGNORES]  [AI CATEGORIZES]
+    (Wait for CSV) (Using Clean Notes)
+```
 
 ---
 
@@ -267,43 +313,26 @@ spec:
 
 ---
 
-## 🤖 actual-ai Integration (On-Demand & Auto-Trigger)
+## Fork Enhancements & Release Notes
 
-This companion uploader features a first-class, premium integration with [rr4444/actual-ai](https://github.com/rr4444/actual-ai) to categorize transactions automatically.
+### Amazon Split & Engine Baseline (v1.1.0)
+* **Expanded Payee Matching**: Dynamically searches `Amz` payees alongside `Amazon` to capture all `Amznmktplace` charges cleanly.
+* **Flexible Date Window**: Allowed a `-2` day date tolerance offset to handle timezone and same-day dispatch differences.
+* **CSV Schema Validation**: Fixed critical CSV header mismatch (`Shipment Address` -> `Shipping Address`).
+* **Multi-Currency Support**: Extracts the currency field directly from the CSV (defaulting to `GBP`) for high-fidelity notes and dry-run previews.
+* **Double-Booking Protection**: Fixed identical-amount duplication bugs via rigorous `used_amazon` set tracking.
+* **Automated Split Transactions**: Adds a powerful `split_transaction` API method to natively create parent-child splits for multi-item orders:
+  * **Idempotency**: Checks `is_parent` before splitting to allow safe duplicate runs, while supporting duplicate items in the same order.
+  * **Precision Rounding**: Performs fraction-of-cent rounding correction on the final sub-transaction to match parent amounts exactly.
+  * **UUID Inheritance**: Split sub-transactions inherit parent payee UUIDs.
+  * **Dry-Run Observability**: Outputs comprehensive split previews with formatted currency amounts and summary counts.
 
-> [!NOTE]
-> **Exclusive to the Web Interface**: This integration is accessible **only** when running the companion uploader via the Web GUI (`app.py`). 
-> 
-> * **Why?**: The core Python script (`actual-ecommerce-noter`) is kept strictly as a standalone, single-purpose matching and splitting CLI utility. Decoupling the AI integration into the Web GUI keeps the CLI lightweight and allows the web dashboard's HTTP orchestrator to handle the asynchronous task lifecycle, Kubernetes RBAC job spawning, and live streaming of container logs directly to your browser.
-
-### 🌟 Key Features
-- **AI Assistant Card**: Displays your active connectivity mode via an `"Initial Integration Test"` on page load (`AI Status: Initial Integration Checked (Kubernetes Mode|Local Mode)`).
-- **On-Demand Manual Classifier**: Run a classification pass at any time directly from the companion dashboard. Spawns an associated one-shot K8s Job linked natively to your existing parent `actual-ai` CronJob via `ownerReferences` (ensuring perfect Rancher/Lens resource grouping and clean garbage collection).
-- **Post-Process Auto-Trigger**: A slider switch (saved in `localStorage`) that automatically schedules a classification pass immediately after a successful CSV noter process!
-- **Asynchronous Progress Logs**: Polling logs dynamically with pod status awareness (`Pending` startup -> `Running` container stream -> `Success`/`Failed` completion).
-
-### ⚙️ Collision-Free Workflows
-To prevent double-classification and transaction collisions, add feature tags inside your `actual-ai` `FEATURES` array:
-- **`amazonNoterWorkflow`**: Tells `actual-ai` to ignore standard Amazon/AMZN transactions (as they are already split and split-itemized by `actual-ecommerce-noter`).
-- **`paypalNoterWorkflow`**: Tells `actual-ai` to ignore standard raw PayPal/PYPL transactions (as they are already auto-correlated, matched, and payee-verified by this companion uploader).
-- **High-Fidelity Prompt Simplification**: `actual-ai` automatically extracts and simplifies note tags generated by the uploader (such as `#Amazon-Product-Name`, `#PayPal-Item-Title`, and split index suffixes) into pure, clean merchant descriptions inside its prompt, ensuring the Gemini model classifies them with maximum category accuracy.
-
-#### **Logical Workflow Diagram**
-```
-           [Actual Budget Uncategorized Transaction]
-                              │
-                              ▼
-                (amazonNoterWorkflow ENABLED?)
-                 ┌────────────┴────────────┐
-                 │ YES                     │ NO
-                 ▼                         ▼
-         [Has Noter Notes?]         [AI CATEGORIZES]
-          ┌──────┴──────┐          (Standard AI Flow)
-       NO │             │ YES
-          ▼             ▼
-     [AI IGNORES]  [AI CATEGORIZES]
-    (Wait for CSV) (Using Clean Notes)
-```
+### PayPal Integration & eCommerce Upgrade (v2.1.0)
+* **Unified eCommerce Dashboard**: Frame Amazon and PayPal as core examples of e-commerce noting.
+* **PayPal Integration**: Filters for `Completed` status, ignores internal funding buffers, and maps USD/EUR currency conversions to their GBP bank equivalents.
+* **Payee-Keyword Correlation**: Extracts and matches payee keywords to prevent cross-matching close amounts on adjacent dates (e.g. Roblox vs Lebara).
+* **Configurable Amount Tolerance**: Exposes amount tolerance on both the CLI (`--amount-tolerance`) and GUI card.
+* **Responsive ACTUAL Theme**: Modern, high-performance UI tailored specifically to Actual Budget's deep-navy and violet design colors.
 
 ---
 

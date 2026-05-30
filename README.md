@@ -271,6 +271,11 @@ spec:
 
 This companion uploader features a first-class, premium integration with [rr4444/actual-ai](https://github.com/rr4444/actual-ai) to categorize transactions automatically.
 
+> [!NOTE]
+> **Exclusive to the Web Interface**: This integration is accessible **only** when running the companion uploader via the Web GUI (`app.py`). 
+> 
+> * **Why?**: The core Python script (`actual-ecommerce-noter`) is kept strictly as a standalone, single-purpose matching and splitting CLI utility. Decoupling the AI integration into the Web GUI keeps the CLI lightweight and allows the web dashboard's HTTP orchestrator to handle the asynchronous task lifecycle, Kubernetes RBAC job spawning, and live streaming of container logs directly to your browser.
+
 ### 🌟 Key Features
 - **AI Assistant Card**: Displays your active connectivity mode via an `"Initial Integration Test"` on page load (`AI Status: Initial Integration Checked (Kubernetes Mode|Local Mode)`).
 - **On-Demand Manual Classifier**: Run a classification pass at any time directly from the companion dashboard. Spawns an associated one-shot K8s Job linked natively to your existing parent `actual-ai` CronJob via `ownerReferences` (ensuring perfect Rancher/Lens resource grouping and clean garbage collection).
